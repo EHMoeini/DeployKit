@@ -56,10 +56,10 @@ app.use('/api/auth', authRoutes);
 app.use('/api/v1/users', authRoutes); // دسترسی به /me از auth
 app.use('/api/users', authRoutes);
 app.use('/api/user', authRoutes);
-app.use('/api/v1/users', userRoutes); // دسترسی به /me/avatar و /me/shatter
+app.use('/api/v1/users', userRoutes); // دسترسی به /files/:filename
 app.use('/api/users', userRoutes);
 app.use('/api/user', userRoutes);
-app.use('/api/v1', userRoutes);       // دسترسی مستقیم به /files/:filename و /me/shatter
+app.use('/api/v1', userRoutes);       // دسترسی مستقیم به /files/:filename
 app.use('/api', userRoutes);
 
 const server = app.listen(PORT, '0.0.0.0', () => {

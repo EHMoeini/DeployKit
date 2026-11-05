@@ -97,7 +97,7 @@ project-root/
 | **01** | `01_repository_scaffolding.md`                      | ایجاد ساختار دایرکتوری‌ها، کانفیگ‌های پایه و پکیج‌ها                            |
 | **02** | `02_database_schema_and_migrations.md`              | طراحی دیتابیس PostgreSQL، ایندکس‌ها، کانکشن پول و رانر مستقل Migration        |
 | **03** | `03_backend_stateless_api_and_auth.md`              | پیاده‌سازی هسته بک‌اند، JWT + Refresh Token چرخشی، Grace Period و CSRF         |
-| **04** | `04_backend_file_storage_and_shatter_api.md`        | انتزاع ذخیره‌سازی فایل مشترک، آپلود آواتار و API ثبت شمارنده رخداد کاربر      |
+| **04** | `04_backend_file_storage_and_job_queue.md`          | انتزاع ذخیره‌سازی فایل مشترک و صف کارهای پس‌زمینه بدون Redis                   |
 | **05** | `05_frontend_spa_routing_and_runtime_config.md`     | راه‌اندازی SPA Router، کانفیگ زمان اجرا (`/config.js`) و Interceptor توکن     |
 | **06** | `06_frontend_components_and_views_structure.md`     | معماری ساختاری ویوها، چرخه حیات کامپوننت‌ها و چیدمان کلاینت SPA               |
 | **07** | `07_frontend_static_server_and_dockerfile.md`       | ساخت سرور استاتیک بدون Nginx با تفکیک 404 واقعی و داکرفایل فرانت‌اند          |

@@ -57,7 +57,7 @@ export const register = async (req, res) => {
         const userRes = await query(
             `INSERT INTO users (email, display_name, password_hash)
        VALUES ($1, $2, $3)
-       RETURNING id, email, display_name, shatter_count, created_at`,
+       RETURNING id, email, display_name, created_at`,
             [email, display_name, pwHash]
         );
 
@@ -73,7 +73,6 @@ export const register = async (req, res) => {
                 email: user.email,
                 username: user.display_name || user.email.replace(/@app\.local$/, ''),
                 display_name: user.display_name,
-                shatter_count: user.shatter_count,
             },
             accessToken,
             csrfToken,
@@ -95,7 +94,7 @@ export const login = async (req, res) => {
 
         const syntheticEmail = rawCredential.includes('@') ? rawCredential : `${rawCredential}@app.local`;
         const userRes = await query(
-            'SELECT id, email, display_name, password_hash, shatter_count FROM users WHERE email = $1 OR display_name = $2 OR email = $3',
+            'SELECT id, email, display_name, password_hash FROM users WHERE email = $1 OR display_name = $2 OR email = $3',
             [rawCredential, rawCredential, syntheticEmail]
         );
 
@@ -120,7 +119,6 @@ export const login = async (req, res) => {
                 email: user.email,
                 username: user.display_name || user.email.replace(/@app\.local$/, ''),
                 display_name: user.display_name,
-                shatter_count: user.shatter_count,
             },
             accessToken,
             csrfToken,
@@ -186,10 +184,7 @@ export const logoutAll = async (req, res) => {
 export const getMe = async (req, res) => {
     try {
         const userRes = await query(
-            `SELECT u.id, u.email, u.display_name, u.shatter_count, f.stored_filename AS avatar_url
-       FROM users u
-       LEFT JOIN files f ON u.avatar_file_id = f.id
-       WHERE u.id = $1`,
+            'SELECT id, email, display_name FROM users WHERE id = $1',
             [req.user.sub]
         );
 
@@ -204,8 +199,6 @@ export const getMe = async (req, res) => {
             email: u.email,
             username: u.display_name || u.email.replace(/@app\.local$/, ''),
             display_name: u.display_name,
-            shatter_count: u.shatter_count,
-            avatar_url: u.avatar_url ? `/api/v1/files/${u.avatar_url}` : null,
         };
         return res.json({
             ...userData,

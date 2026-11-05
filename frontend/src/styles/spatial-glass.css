@@ -400,15 +400,6 @@ body {
     gap: 1rem;
 }
 
-.welcome-avatar-img {
-    width: 54px;
-    height: 54px;
-    border-radius: 14px;
-    border: 1px solid rgba(255, 255, 255, 0.18);
-    object-fit: cover;
-    background: rgba(255, 255, 255, 0.05);
-}
-
 .welcome-meta {
     flex: 1;
 }
@@ -430,50 +421,9 @@ body {
     color: var(--text-muted);
 }
 
-.welcome-stats-box {
-    background: rgba(11, 16, 26, 0.5);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 14px;
-    padding: 14px 16px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-.stat-label {
-    font-size: 0.85rem;
-    color: var(--text-muted);
-}
-
-.stat-value {
-    font-family: var(--font-mono);
-    font-size: 1.1rem;
-    font-weight: 600;
-    color: var(--accent-ice);
-}
-
 .welcome-actions {
     display: flex;
     gap: 0.75rem;
-}
-
-.btn-secondary-glass {
-    flex: 1;
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 10px;
-    color: var(--text-primary);
-    font-family: var(--font-persian);
-    font-size: 0.85rem;
-    padding: 10px 14px;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    text-align: center;
-}
-
-.btn-secondary-glass:hover {
-    background: rgba(255, 255, 255, 0.1);
-    border-color: rgba(255, 255, 255, 0.2);
 }
 
 .btn-logout-glass {

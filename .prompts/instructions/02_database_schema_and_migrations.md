@@ -75,8 +75,6 @@ CREATE TABLE IF NOT EXISTS users (
     email VARCHAR(255) NOT NULL UNIQUE,
     display_name VARCHAR(100) NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
-    shatter_count INTEGER NOT NULL DEFAULT 0,
-    avatar_file_id UUID NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -114,16 +112,6 @@ CREATE TABLE IF NOT EXISTS files (
 );
 
 CREATE INDEX IF NOT EXISTS idx_files_user_id ON files(user_id);
-
--- ارجاع کلید خارجی برای آواتار کاربر
-ALTER TABLE users
-    DROP CONSTRAINT IF EXISTS fk_users_avatar;
-
-ALTER TABLE users
-    ADD CONSTRAINT fk_users_avatar
-    FOREIGN KEY (avatar_file_id)
-    REFERENCES files(id)
-    ON DELETE SET NULL;
 ```
 
 #### فایل ۴: ایجاد جدول صف Background Jobs در صورت نیاز (`backend/migrations/004_create_background_jobs_table.sql`)
@@ -145,6 +133,19 @@ CREATE TABLE IF NOT EXISTS background_jobs (
 CREATE INDEX IF NOT EXISTS idx_jobs_processing
     ON background_jobs(status, run_at)
     WHERE status IN ('pending', 'processing');
+```
+
+#### فایل ۵: پاک‌سازی ستون‌های منسوخ در دیتابیس‌های موجود (`backend/migrations/005_remove_avatar_and_shatter.sql`)
+برای هم‌تراز کردن دیتابیس‌هایی که پیش‌تر با ساختار قدیمی ساخته شده‌اند، ستون‌های بدون استفاده را به صورت Idempotent حذف کن:
+```sql
+ALTER TABLE users
+    DROP CONSTRAINT IF EXISTS fk_users_avatar;
+
+ALTER TABLE users
+    DROP COLUMN IF EXISTS avatar_file_id;
+
+ALTER TABLE users
+    DROP COLUMN IF EXISTS shatter_count;
 ```
 
 ---

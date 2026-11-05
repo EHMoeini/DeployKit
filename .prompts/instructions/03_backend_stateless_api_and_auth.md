@@ -297,7 +297,7 @@ export const register = async (req, res) => {
     const userRes = await query(
       `INSERT INTO users (email, display_name, password_hash)
        VALUES ($1, $2, $3)
-       RETURNING id, email, display_name, shatter_count, created_at`,
+       RETURNING id, email, display_name, created_at`,
       [email, display_name, pwHash]
     );
 
@@ -311,7 +311,6 @@ export const register = async (req, res) => {
         id: user.id,
         email: user.email,
         display_name: user.display_name,
-        shatter_count: user.shatter_count,
       },
       accessToken,
     });
@@ -329,7 +328,7 @@ export const login = async (req, res) => {
     }
 
     const userRes = await query(
-      'SELECT id, email, display_name, password_hash, shatter_count FROM users WHERE email = $1',
+      'SELECT id, email, display_name, password_hash FROM users WHERE email = $1',
       [email]
     );
 
@@ -352,7 +351,6 @@ export const login = async (req, res) => {
         id: user.id,
         email: user.email,
         display_name: user.display_name,
-        shatter_count: user.shatter_count,
       },
       accessToken,
     });
@@ -412,10 +410,7 @@ export const logoutAll = async (req, res) => {
 export const getMe = async (req, res) => {
   try {
     const userRes = await query(
-      `SELECT u.id, u.email, u.display_name, u.shatter_count, f.stored_filename AS avatar_url
-       FROM users u
-       LEFT JOIN files f ON u.avatar_file_id = f.id
-       WHERE u.id = $1`,
+      'SELECT id, email, display_name FROM users WHERE id = $1',
       [req.user.sub]
     );
 
@@ -428,8 +423,6 @@ export const getMe = async (req, res) => {
       id: u.id,
       email: u.email,
       display_name: u.display_name,
-      shatter_count: u.shatter_count,
-      avatar_url: u.avatar_url ? `/api/v1/files/${u.avatar_url}` : null,
     });
   } catch (err) {
     return res.status(500).json({ error: 'Error fetching profile' });

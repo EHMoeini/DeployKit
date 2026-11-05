@@ -9,13 +9,3 @@ CREATE TABLE IF NOT EXISTS files (
 );
 
 CREATE INDEX IF NOT EXISTS idx_files_user_id ON files(user_id);
-
--- ارجاع کلید خارجی برای آواتار کاربر
-ALTER TABLE users
-    DROP CONSTRAINT IF EXISTS fk_users_avatar;
-
-ALTER TABLE users
-    ADD CONSTRAINT fk_users_avatar
-    FOREIGN KEY (avatar_file_id)
-    REFERENCES files(id)
-    ON DELETE SET NULL;

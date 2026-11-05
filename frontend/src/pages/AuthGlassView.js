@@ -95,8 +95,6 @@ export class AuthGlassView {
     renderWelcome() {
         const user = authState.getUser() || {};
         const username = user.username || user.display_name || user.email || 'کاربر گرامی';
-        const avatarUrl = user.avatar_url || '/assets/default-avatar.svg';
-        const shatterCount = user.shatter_count || 0;
 
         return `
       <div class="spatial-glass-panel" id="spatial-panel">
@@ -109,28 +107,15 @@ export class AuthGlassView {
           </header>
 
           <div class="welcome-header">
-            <img class="welcome-avatar-img" id="user-avatar" src="${avatarUrl}" alt="${username}" />
             <div class="welcome-meta">
               <h2 class="welcome-greeting-title">خوش آمدید، <span class="welcome-username-highlight">${username}</span></h2>
               <p class="welcome-subtext">نشست کاربری شما فعال و متصل به کلاستر است</p>
             </div>
           </div>
 
-          <div class="welcome-stats-box">
-            <span class="stat-label">شمارنده شتر اتمیک (Shatter Counter):</span>
-            <span class="stat-value" id="shatter-value">${shatterCount}</span>
-          </div>
-
           <div class="welcome-actions">
-            <button type="button" class="btn-secondary-glass" id="shatter-btn">افزایش شمارنده (+۱)</button>
-            <label class="btn-secondary-glass" style="cursor: pointer; display: flex; align-items: center; justify-content: center;">
-              تغییر تصویر
-              <input type="file" id="avatar-input" accept="image/png,image/jpeg,image/webp,image/svg+xml" style="display: none;" />
-            </label>
             <button type="button" class="btn-logout-glass" id="logout-btn">خروج</button>
           </div>
-
-          <div class="spatial-feedback" id="welcome-feedback"></div>
         </div>
       </div>
     `;
@@ -237,57 +222,6 @@ export class AuthGlassView {
                 }
             });
         }
-
-        const shatterBtn = this.container.querySelector('#shatter-btn');
-        if (shatterBtn) {
-            shatterBtn.addEventListener('click', async () => {
-                try {
-                    shatterBtn.disabled = true;
-                    const result = await orchestrationAdapter.dispatch('/users/me/shatter', { method: 'POST' });
-                    const valEl = this.container.querySelector('#shatter-value');
-                    if (valEl && result.data && typeof result.data.shatter_count !== 'undefined') {
-                        valEl.textContent = result.data.shatter_count;
-                    }
-                } catch (err) {
-                    this.showFeedback('خطا در افزایش شمارنده', true);
-                } finally {
-                    shatterBtn.disabled = false;
-                }
-            });
-        }
-
-        const avatarInput = this.container.querySelector('#avatar-input');
-        if (avatarInput) {
-            avatarInput.addEventListener('change', async (e) => {
-                const file = e.target.files && e.target.files[0];
-                if (!file) return;
-
-                const formData = new FormData();
-                formData.append('avatar', file);
-
-                try {
-                    const res = await fetch('/api/v1/users/me/avatar', {
-                        method: 'POST',
-                        headers: {
-                            'Authorization': `Bearer ${authState.getAccessToken()}`,
-                        },
-                        body: formData,
-                    });
-                    const data = await res.json();
-                    if (res.ok && data.avatar_url) {
-                        const avatarImg = this.container.querySelector('#user-avatar');
-                        if (avatarImg) {
-                            avatarImg.src = `${data.avatar_url}?t=${Date.now()}`;
-                        }
-                        this.showFeedback('تصویر نمایه با موفقیت به‌روزرسانی شد.', false);
-                    } else {
-                        this.showFeedback(data.error || 'خطا در بارگذاری تصویر', true);
-                    }
-                } catch (err) {
-                    this.showFeedback('ارتباط با سرور برقرار نشد.', true);
-                }
-            });
-        }
     }
 
     async handleAuthSubmit() {
@@ -337,7 +271,7 @@ export class AuthGlassView {
 
     showFeedback(message, isError = false) {
         if (!this.container) return;
-        const fb = this.container.querySelector('#auth-feedback') || this.container.querySelector('#welcome-feedback');
+        const fb = this.container.querySelector('#auth-feedback');
         if (fb) {
             fb.textContent = message;
             fb.className = `spatial-feedback ${isError ? 'is-error' : 'is-success'}`;
