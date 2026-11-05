@@ -1,0 +1,585 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Vazirmatn:wght@300;400;500;600;700&display=swap');
+
+:root {
+    --bg-deep: #080B12;
+    --bg-secondary: #101724;
+    --bg-navy: #111927;
+    --text-primary: #F4F6FA;
+    --text-muted: #8E9AA8;
+    --text-dim: #647082;
+    --accent-ice: #9ACFE4;
+    --accent-lavender: #AAA5D8;
+    --glass-bg: rgba(225, 240, 255, 0.055);
+    --glass-border: rgba(255, 255, 255, 0.12);
+    --glass-highlight: rgba(255, 255, 255, 0.18);
+    --glass-shadow: 0 24px 48px -12px rgba(0, 0, 0, 0.65), 0 8px 24px -4px rgba(8, 11, 18, 0.5);
+    --font-persian: 'Vazirmatn', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+html,
+body {
+    height: 100%;
+    width: 100%;
+    background-color: var(--bg-deep);
+    color: var(--text-primary);
+    font-family: var(--font-persian);
+    direction: rtl;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* ساختار فضایی تک‌صفحه‌ای */
+.spatial-viewport {
+    position: relative;
+    min-height: 100vh;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    background:
+        radial-gradient(circle at 18% 25%, rgba(154, 207, 228, 0.06) 0%, transparent 45%),
+        radial-gradient(circle at 82% 70%, rgba(170, 165, 216, 0.05) 0%, transparent 50%),
+        radial-gradient(circle at 50% 100%, rgba(17, 25, 39, 0.7) 0%, transparent 60%),
+        var(--bg-deep);
+}
+
+/* شبکه پس‌زمینه با نویز ظریف */
+.spatial-viewport::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: radial-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+    background-size: 32px 32px;
+    pointer-events: none;
+    opacity: 0.6;
+}
+
+/* لایه صحنه اصلی نامتقارن (Asymmetric Layout) */
+.spatial-stage {
+    position: relative;
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1.15fr 0.85fr;
+    align-items: center;
+    max-width: 1320px;
+    margin: 0 auto;
+    padding: 3rem 2.5rem;
+    width: 100%;
+    z-index: 10;
+    gap: 3rem;
+}
+
+/* کانتینر مجسمه شیشه‌ای */
+.spatial-sculpture-wrapper {
+    position: relative;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    pointer-events: none;
+}
+
+.spatial-sculpture-scene {
+    position: relative;
+    width: 100%;
+    max-width: 580px;
+    transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    will-change: transform;
+}
+
+.spatial-sculpture-svg {
+    width: 100%;
+    height: auto;
+    filter: drop-shadow(0 20px 40px rgba(0, 0, 0, 0.5));
+}
+
+.glass-facet {
+    transform-origin: center;
+    transition: opacity 0.5s ease;
+}
+
+.facet-core {
+    animation: floatCore 9s ease-in-out infinite;
+}
+
+.facet-back {
+    animation: floatBack 12s ease-in-out infinite alternate;
+}
+
+.facet-front {
+    animation: floatFront 10s ease-in-out infinite alternate-reverse;
+}
+
+@keyframes floatCore {
+
+    0%,
+    100% {
+        transform: translateY(0px) rotate(0deg);
+    }
+
+    50% {
+        transform: translateY(-8px) rotate(0.5deg);
+    }
+}
+
+@keyframes floatBack {
+    0% {
+        transform: translateY(0px) rotate(0deg);
+    }
+
+    100% {
+        transform: translateY(10px) rotate(-1deg);
+    }
+}
+
+@keyframes floatFront {
+    0% {
+        transform: translateY(0px) rotate(0deg);
+    }
+
+    100% {
+        transform: translateY(-12px) rotate(0.8deg);
+    }
+}
+
+/* پنل شیشه‌ای تعاملی (Spatial Liquid Glass Panel) */
+.spatial-glass-panel {
+    position: relative;
+    background: var(--glass-bg);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid var(--glass-border);
+    border-radius: 24px;
+    box-shadow: var(--glass-shadow);
+    padding: 2.5rem;
+    max-width: 440px;
+    width: 100%;
+    margin: 0 auto;
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    overflow: hidden;
+}
+
+/* انعکاس داخلی لبه بالای پنل شیشه‌ای */
+.spatial-glass-panel::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.35), transparent);
+}
+
+/* سربرگ پنل */
+.panel-header {
+    margin-bottom: 2rem;
+    text-align: right;
+}
+
+.panel-brand-mark {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+}
+
+.brand-gem {
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+    background: var(--accent-ice);
+    box-shadow: 0 0 12px var(--accent-ice);
+}
+
+.brand-text {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    letter-spacing: 0.1em;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    direction: ltr;
+}
+
+.panel-title {
+    font-size: 1.4rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 0.35rem;
+    letter-spacing: -0.01em;
+}
+
+.panel-subtitle {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    font-weight: 400;
+}
+
+/* زبانه‌های سوئیچ ورود / ثبت‌نام */
+.spatial-tabs-wrapper {
+    display: flex;
+    background: rgba(16, 23, 36, 0.65);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 14px;
+    padding: 4px;
+    margin-bottom: 1.75rem;
+    gap: 4px;
+}
+
+.spatial-tab-btn {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-family: var(--font-persian);
+    font-size: 0.9rem;
+    font-weight: 500;
+    padding: 8px 16px;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.spatial-tab-btn:hover {
+    color: var(--text-primary);
+}
+
+.spatial-tab-btn.is-active {
+    background: rgba(225, 240, 255, 0.12);
+    color: var(--text-primary);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
+/* فرم‌ها و فیلدهای ورودی */
+.spatial-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+}
+
+.spatial-field-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+    text-align: right;
+}
+
+.spatial-label {
+    font-size: 0.82rem;
+    font-weight: 500;
+    color: var(--text-muted);
+}
+
+.spatial-input-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.spatial-input {
+    width: 100%;
+    background: rgba(11, 16, 26, 0.65);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    padding: 11px 14px;
+    color: var(--text-primary);
+    font-family: var(--font-persian);
+    font-size: 0.92rem;
+    transition: all 0.2s ease;
+    outline: none;
+}
+
+.spatial-input::placeholder {
+    color: var(--text-dim);
+    font-size: 0.85rem;
+}
+
+.spatial-input:focus {
+    border-color: rgba(154, 207, 228, 0.5);
+    background: rgba(15, 22, 35, 0.85);
+    box-shadow: 0 0 0 3px rgba(154, 207, 228, 0.12);
+}
+
+.password-toggle-btn {
+    position: absolute;
+    left: 12px;
+    background: transparent;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px;
+    transition: color 0.2s ease;
+}
+
+.password-toggle-btn:hover {
+    color: var(--text-primary);
+}
+
+/* دکمه اکشن اصلی شیشه‌ای */
+.spatial-submit-btn {
+    position: relative;
+    margin-top: 0.5rem;
+    background: linear-gradient(135deg, rgba(154, 207, 228, 0.22) 0%, rgba(170, 165, 216, 0.14) 100%);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 12px;
+    color: var(--text-primary);
+    font-family: var(--font-persian);
+    font-size: 0.95rem;
+    font-weight: 600;
+    padding: 12px 20px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    transition: all 0.25s ease;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+}
+
+.spatial-submit-btn:hover:not(:disabled) {
+    background: linear-gradient(135deg, rgba(154, 207, 228, 0.3) 0%, rgba(170, 165, 216, 0.2) 100%);
+    border-color: rgba(255, 255, 255, 0.3);
+    box-shadow: 0 6px 20px rgba(154, 207, 228, 0.2);
+    transform: translateY(-1px);
+}
+
+.spatial-submit-btn:active:not(:disabled) {
+    transform: translateY(0);
+}
+
+.spatial-submit-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* پیام وضعیت / خطا */
+.spatial-feedback {
+    padding: 9px 13px;
+    border-radius: 10px;
+    font-size: 0.82rem;
+    line-height: 1.4;
+    margin-top: 0.75rem;
+    display: none;
+}
+
+.spatial-feedback.is-error {
+    display: block;
+    background: rgba(239, 68, 68, 0.12);
+    border: 1px solid rgba(239, 68, 68, 0.25);
+    color: #FCA5A5;
+}
+
+.spatial-feedback.is-success {
+    display: block;
+    background: rgba(16, 185, 129, 0.12);
+    border: 1px solid rgba(16, 185, 129, 0.25);
+    color: #6EE7B7;
+}
+
+/* پنل خوش‌آمدگویی (Welcome Panel) */
+.welcome-panel-content {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    text-align: right;
+}
+
+.welcome-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.welcome-avatar-img {
+    width: 54px;
+    height: 54px;
+    border-radius: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    object-fit: cover;
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.welcome-meta {
+    flex: 1;
+}
+
+.welcome-greeting-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 0.2rem;
+}
+
+.welcome-username-highlight {
+    color: var(--accent-ice);
+    font-weight: 700;
+}
+
+.welcome-subtext {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.welcome-stats-box {
+    background: rgba(11, 16, 26, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 14px;
+    padding: 14px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.stat-label {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+
+.stat-value {
+    font-family: var(--font-mono);
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--accent-ice);
+}
+
+.welcome-actions {
+    display: flex;
+    gap: 0.75rem;
+}
+
+.btn-secondary-glass {
+    flex: 1;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 10px;
+    color: var(--text-primary);
+    font-family: var(--font-persian);
+    font-size: 0.85rem;
+    padding: 10px 14px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-align: center;
+}
+
+.btn-secondary-glass:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.btn-logout-glass {
+    background: rgba(239, 68, 68, 0.08);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    border-radius: 10px;
+    color: #FCA5A5;
+    font-family: var(--font-persian);
+    font-size: 0.85rem;
+    padding: 10px 16px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-logout-glass:hover {
+    background: rgba(239, 68, 68, 0.18);
+    border-color: rgba(239, 68, 68, 0.35);
+}
+
+/* فوتر پاد شناور (Pod Identifier Footer - Fixed Bottom-Left) */
+.pod-footer-fixed {
+    position: fixed;
+    bottom: 16px;
+    left: 20px;
+    z-index: 1000;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 6px 12px;
+    background: rgba(8, 11, 18, 0.7);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 999px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: rgba(154, 207, 228, 0.75);
+    letter-spacing: 0.03em;
+    pointer-events: none;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+}
+
+.pod-indicator-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent-ice);
+    box-shadow: 0 0 8px var(--accent-ice);
+    animation: pulseDot 3s ease-in-out infinite;
+}
+
+@keyframes pulseDot {
+
+    0%,
+    100% {
+        opacity: 0.5;
+    }
+
+    50% {
+        opacity: 1;
+    }
+}
+
+/* رسپانسیو برای تبلت و موبایل */
+@media (max-width: 992px) {
+    .spatial-stage {
+        grid-template-columns: 1fr;
+        padding: 2.5rem 1.5rem;
+        gap: 2rem;
+    }
+
+    .spatial-sculpture-wrapper {
+        order: -1;
+        max-height: 260px;
+        overflow: hidden;
+    }
+
+    .spatial-sculpture-scene {
+        max-width: 320px;
+        opacity: 0.85;
+    }
+}
+
+@media (max-width: 480px) {
+    .spatial-glass-panel {
+        padding: 1.75rem 1.25rem;
+        border-radius: 20px;
+    }
+
+    .pod-footer-fixed {
+        bottom: 12px;
+        left: 12px;
+        font-size: 10px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+    .facet-core,
+    .facet-back,
+    .facet-front,
+    .pod-indicator-dot {
+        animation: none !important;
+    }
+
+    .spatial-sculpture-scene {
+        transition: none !important;
+    }
+}

@@ -1,0 +1,18 @@
+---
+- name: Infrastructure Provisioning and Base Hardening
+  hosts: servers
+  become: true
+  roles:
+    - common
+    - security
+    - firewall
+    - storage
+    - docker
+    - traefik
+    - backup
+
+- name: Deploy Application Services
+  hosts: servers
+  become: true
+  roles:
+    - application

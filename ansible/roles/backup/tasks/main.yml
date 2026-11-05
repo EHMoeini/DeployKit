@@ -1,0 +1,31 @@
+---
+- name: Copy backup and disaster recovery scripts
+  ansible.builtin.copy:
+    src: "../../../scripts/{{ item }}"
+    dest: "/srv/{{ project_name }}/scripts/{{ item }}"
+    owner: deployer
+    group: deployer
+    mode: "0750"
+  loop:
+    - backup_postgres.sh
+    - verify_backup.sh
+    - test_restore_monthly.sh
+
+- name: Create Systemd service for daily postgres backup
+  ansible.builtin.template:
+    src: postgres-backup.service.j2
+    dest: /etc/systemd/system/postgres-backup.service
+    mode: "0644"
+
+- name: Create Systemd timer for daily postgres backup (03:00 UTC)
+  ansible.builtin.template:
+    src: postgres-backup.timer.j2
+    dest: /etc/systemd/system/postgres-backup.timer
+    mode: "0644"
+
+- name: Enable and start postgres-backup.timer
+  ansible.builtin.systemd:
+    name: postgres-backup.timer
+    state: started
+    enabled: true
+    daemon_reload: true

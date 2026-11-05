@@ -1,0 +1,100 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: ${PROJECT_NAME}_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      # مسیر Bind Mount ماندگار دیتابیس روی Host سرور
+      - /srv/${PROJECT_NAME}/postgres/data:/var/lib/postgresql/data
+    networks:
+      - app-internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  migrate:
+    image: ghcr.io/${GHCR_OWNER}/${GHCR_REPO}/backend:${IMAGE_TAG}
+    container_name: ${PROJECT_NAME}_migrate
+    command: ["node", "src/config/run-migrations.js"]
+    restart: "no"
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - app-internal
+
+  backend:
+    image: ghcr.io/${GHCR_OWNER}/${GHCR_REPO}/backend:${IMAGE_TAG}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_POOL_MAX: ${DB_POOL_MAX:-10}
+      JWT_SECRET: ${JWT_SECRET}
+      REFRESH_TOKEN_SECRET: ${REFRESH_TOKEN_SECRET}
+      CSRF_SECRET: ${CSRF_SECRET}
+      SHARED_STORAGE_PATH: /srv/portal/uploads
+    volumes:
+      # حجم اشتراکی فایل‌ها روی Host
+      - /srv/${PROJECT_NAME}/uploads:/srv/portal/uploads
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - app-internal
+      - traefik-public
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.${PROJECT_NAME}_backend.rule=Host(`${DOMAIN}`) && PathPrefix(`/api/`)"
+      - "traefik.http.routers.${PROJECT_NAME}_backend.priority=100"
+      - "traefik.http.routers.${PROJECT_NAME}_backend.entrypoints=websecure"
+      - "traefik.http.routers.${PROJECT_NAME}_backend.tls=true"
+      - "traefik.http.routers.${PROJECT_NAME}_backend.tls.certresolver=letsencrypt"
+      - "traefik.http.services.${PROJECT_NAME}_backend.loadbalancer.server.port=3000"
+
+  frontend:
+    image: ghcr.io/${GHCR_OWNER}/${GHCR_REPO}/frontend:${IMAGE_TAG}
+    container_name: ${PROJECT_NAME}_frontend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 8080
+      API_BASE_URL: ${API_BASE_URL:-/api/v1}
+      PROJECT_NAME: ${PROJECT_NAME}
+    depends_on:
+      - backend
+    networks:
+      - traefik-public
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.${PROJECT_NAME}_frontend.rule=Host(`${DOMAIN}`)"
+      - "traefik.http.routers.${PROJECT_NAME}_frontend.priority=10"
+      - "traefik.http.routers.${PROJECT_NAME}_frontend.entrypoints=websecure"
+      - "traefik.http.routers.${PROJECT_NAME}_frontend.tls=true"
+      - "traefik.http.routers.${PROJECT_NAME}_frontend.tls.certresolver=letsencrypt"
+      - "traefik.http.services.${PROJECT_NAME}_frontend.loadbalancer.server.port=8080"
+
+networks:
+  app-internal:
+    internal: true
+  traefik-public:
+    external: true

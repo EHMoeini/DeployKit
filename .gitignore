@@ -1,0 +1,45 @@
+# Environment & Secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+ansible/vault/vault_pass.txt
+ansible/vault/*.secret
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Build outputs
+frontend/dist/
+backend/dist/
+dist/
+build/
+
+# Runtime Data & Storage
+/srv/
+postgres/data/
+uploads/
+*.dump
+*.tmp
+
+# Traefik & SSL
+acme.json
+/srv/traefik/acme/
+
+# Ansible artifacts
+ansible/artifacts/
+ansible/*.retry
+*.log
+
+# OS & Editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo

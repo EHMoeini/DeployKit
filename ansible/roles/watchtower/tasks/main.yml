@@ -1,0 +1,4 @@
+---
+- name: Note about Watchtower in Production
+  ansible.builtin.debug:
+    msg: "Watchtower is disabled for application containers to ensure immutable deployments. It may only monitor Traefik if configured."

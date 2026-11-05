@@ -1,0 +1,56 @@
+---
+- name: Create application directory layout
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: deployer
+    group: deployer
+    mode: "0755"
+  loop:
+    - "/srv/{{ project_name }}"
+    - "/srv/{{ project_name }}/postgres/data"
+    - "/srv/{{ project_name }}/uploads"
+    - "/srv/{{ project_name }}/scripts"
+    - "/srv/{{ project_name }}/backups/postgres/daily"
+    - "/srv/{{ project_name }}/backups/postgres/monthly"
+
+- name: Set strict 700 permissions on PostgreSQL data directory
+  ansible.builtin.file:
+    path: "/srv/{{ project_name }}/postgres/data"
+    state: directory
+    owner: "999"
+    group: "999"
+    mode: "0700"
+
+- name: Copy deployment environment configuration (.env)
+  ansible.builtin.template:
+    src: env.j2
+    dest: "/srv/{{ project_name }}/.env"
+    owner: deployer
+    group: deployer
+    mode: "0600"
+
+- name: Copy docker-compose.yml
+  ansible.builtin.copy:
+    src: ../../../docker-compose.yml
+    dest: "/srv/{{ project_name }}/docker-compose.yml"
+    owner: deployer
+    group: deployer
+    mode: "0644"
+
+- name: Deploy application containers with immutable image tag
+  community.docker.docker_compose_v2:
+    project_src: "/srv/{{ project_name }}"
+    state: present
+    pull: always
+  environment:
+    IMAGE_TAG: "{{ app_image_tag | default('latest') }}"
+
+- name: Wait for backend health check
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:3000/health/ready"
+    status_code: 200
+  register: result
+  until: result.status == 200
+  retries: 12
+  delay: 5

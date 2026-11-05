@@ -1,0 +1,24 @@
+---
+- name: Ensure SSH directory exists
+  ansible.builtin.file:
+    path: /etc/ssh/sshd_config.d
+    state: directory
+    mode: "0755"
+
+- name: Configure hardened SSH parameters
+  ansible.builtin.copy:
+    dest: /etc/ssh/sshd_config.d/99-hardened.conf
+    content: |
+      PermitRootLogin no
+      PasswordAuthentication no
+      PubkeyAuthentication yes
+      MaxAuthTries 3
+      X11Forwarding no
+    mode: "0644"
+  notify: Restart SSH service
+
+- name: Enable and start fail2ban
+  ansible.builtin.systemd:
+    name: fail2ban
+    state: started
+    enabled: true

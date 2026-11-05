@@ -1,0 +1,18 @@
+---
+- name: Audit disk partition layout (read-only)
+  ansible.builtin.command: lsblk -e7 -o NAME,SIZE,TYPE,FSTYPE,MOUNTPOINTS,UUID,MODEL
+  register: disk_layout
+  changed_when: false
+
+- name: Audit filesystem disk space (read-only)
+  ansible.builtin.command: df -h -T / /var
+  register: fs_capacity
+  changed_when: false
+
+- name: Display storage configuration facts
+  ansible.builtin.debug:
+    msg:
+      - "Disk Layout:"
+      - "{{ disk_layout.stdout_lines }}"
+      - "Filesystem Usage:"
+      - "{{ fs_capacity.stdout_lines }}"

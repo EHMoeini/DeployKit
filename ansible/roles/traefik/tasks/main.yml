@@ -1,0 +1,36 @@
+---
+- name: Ensure Traefik public docker network exists
+  community.docker.docker_network:
+    name: traefik-public
+    state: present
+
+- name: Create Traefik directory structure
+  ansible.builtin.file:
+    path: "/srv/{{ project_name }}/traefik"
+    state: directory
+    owner: deployer
+    group: deployer
+    mode: "0755"
+
+- name: Create acme.json with strict 600 permissions
+  ansible.builtin.file:
+    path: "/srv/{{ project_name }}/traefik/acme.json"
+    state: touch
+    owner: deployer
+    group: deployer
+    mode: "0600"
+    modification_time: preserve
+    access_time: preserve
+
+- name: Copy Traefik docker-compose template
+  ansible.builtin.copy:
+    src: ../../../traefik/docker-compose.yml
+    dest: "/srv/{{ project_name }}/traefik/docker-compose.yml"
+    owner: deployer
+    group: deployer
+    mode: "0644"
+
+- name: Deploy Traefik service
+  community.docker.docker_compose_v2:
+    project_src: "/srv/{{ project_name }}/traefik"
+    state: present

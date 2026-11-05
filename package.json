@@ -1,0 +1,9 @@
+{
+    "name": "deploy-with-agent-root",
+    "version": "1.0.0",
+    "private": true,
+    "scripts": {
+        "install:all": "cd backend && npm install && cd ../frontend && npm install",
+        "test:local": "bash scripts/test_local.sh"
+    }
+}
