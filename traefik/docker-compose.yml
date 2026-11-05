@@ -1,5 +1,3 @@
-version: '3.8'
-
 # Traefik runs as its own Docker Swarm stack on the manager node.
 # Deploy only through ansible/roles/traefik.
 services:

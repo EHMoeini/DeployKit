@@ -1,5 +1,3 @@
-version: '3.8'
-
 # Production Docker Swarm stack.
 # Deploy only through Ansible (ansible/playbooks/site.yml or deploy.yml).
 services:
