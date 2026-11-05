@@ -1,17 +1,17 @@
 version: '3.8'
 
+# Traefik runs as its own Docker Swarm stack on the manager node.
+# Deploy only through ansible/roles/traefik.
 services:
   traefik:
     image: traefik:v3
-    container_name: traefik
-    restart: unless-stopped
     security_opt:
       - no-new-privileges:true
     command:
-      # تنظیمات عمومی و لاگ
+      # General settings and logging
       - "--log.level=INFO"
       - "--accesslog=true"
-      # درگاه‌های ورودی
+      # Public entrypoints
       - "--entrypoints.web.address=:80"
       - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
       - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
@@ -19,25 +19,44 @@ services:
       - "--entrypoints.websecure.address=:443"
       - "--entrypoints.websecure.http.tls=true"
       - "--entrypoints.websecure.forwardedHeaders.trustedIPs=127.0.0.1/32,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
-      # ارائه‌دهنده داکر
-      - "--providers.docker=true"
-      - "--providers.docker.exposedbydefault=false"
-      - "--providers.docker.network=traefik-public"
-      # دریافت خودکار گواهی Let's Encrypt با چالش HTTP-01
+      # Swarm provider: discovers deploy.labels from stack services
+      - "--providers.swarm=true"
+      - "--providers.swarm.endpoint=unix:///var/run/docker.sock"
+      - "--providers.swarm.exposedbydefault=false"
+      - "--providers.swarm.network=traefik-public"
+      # Automatic Let's Encrypt certificates via HTTP-01
       - "--certificatesresolvers.letsencrypt.acme.httpchallenge=true"
       - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
       - "--certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL}"
       - "--certificatesresolvers.letsencrypt.acme.storage=/acme/acme.json"
-      # غیرفعال‌سازی داشبورد عمومی
       - "--api.dashboard=false"
     ports:
-      - "80:80"
-      - "443:443"
+      - target: 80
+        published: 80
+        protocol: tcp
+        mode: ingress
+      - target: 443
+        published: 443
+        protocol: tcp
+        mode: ingress
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - /srv/traefik/acme/acme.json:/acme/acme.json
     networks:
       - traefik-public
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      restart_policy:
+        condition: any
+        delay: 5s
+        max_attempts: 3
+        window: 60s
+      update_config:
+        order: stop-first
+        failure_action: rollback
 
 networks:
   traefik-public:

@@ -6,7 +6,7 @@
 
 ## ۱. هدف و چشم‌انداز سیستم
 
-پیاده‌سازی و استقرار کامل یک سامانه تحت وب مدرن، کاملاً **Stateless** در لایه اپلیکیشن، مقیاس‌پذیر به صورت افقی (Horizontal Scaling)، فرانت‌اند تک‌صفحه‌ای (True SPA) ساختاریافته و ماژولار، پایگاه داده ماندگار PostgreSQL، پروکسی معکوس Traefik با SSL خودکار، کانتینرسازی استاندارد Docker، پایپ‌لاین CI/CD در GitHub Actions و مدیریت زیرساخت با Ansible.
+پیاده‌سازی و استقرار کامل یک سامانه تحت وب مدرن، کاملاً **Stateless** در لایه اپلیکیشن، مقیاس‌پذیر به صورت افقی (Horizontal Scaling)، فرانت‌اند تک‌صفحه‌ای (True SPA) ساختاریافته و ماژولار، پایگاه داده ماندگار PostgreSQL، پروکسی معکوس Traefik با SSL خودکار، کانتینرسازی استاندارد Docker، ارکستراسیون **Docker Swarm**، پایپ‌لاین CI/CD در GitHub Actions و مدیریت زیرساخت با Ansible.
 
 ---
 
@@ -30,6 +30,8 @@
    - هیچ رمز عبور، کلید خصوصی، توکن یا کانفیگ حساسی نباید در سورس‌کد، Dockerfile یا مخزن Git ثبت شود. متغیرها باید از `.env`، Secretهای GitHub Actions و Ansible Vault تغذیه شوند.
 8. **دروازه تأیید انسانی (Human Approval Gates):**
    - برای اقدامات پرریسک (مانند اعمال تغییرات دیسک در `storage-apply.yml`، تغییر قوانین SSH فایروال، اجرای Migrationهای مخرب یا بازنویسی دیتابیس در Disaster Recovery) Agent باید طرح و خطرات را به کاربر نمایش داده و تأیید صریح دریافت کند.
+9. **تغییرات فقط از طریق Ansible:**
+   - هیچ دستور تغییری مستقیماً روی سرور اجرا نمی‌شود. راه‌اندازی Swarm، ساخت شبکه‌ها، استقرار استک‌ها، Migration، Rollback و Teardown همگی باید از پلی‌بوک‌های Ansible انجام شوند و قابل بازگشت باشند.
 
 ---
 
@@ -77,7 +79,7 @@ project-root/
 │   ├── playbooks/
 │   ├── roles/
 │   └── vault/
-├── docker-compose.yml              # فایل استقرار Production/Staging بر پایه ایمیج‌های GHCR
+├── docker-compose.yml              # استک Docker Swarm برای Production/Staging (۳ فرانت / ۴ بک‌اند)
 ├── docker-compose.local.yml        # فایل اجرای محلی و تست مقیاس‌پذیری (شامل ساخت محلی و Traefik محلی)
 ├── .env.example                    # الگوی متغیرهای محیطی
 ├── .gitignore
@@ -99,11 +101,11 @@ project-root/
 | **05** | `05_frontend_spa_routing_and_runtime_config.md`     | راه‌اندازی SPA Router، کانفیگ زمان اجرا (`/config.js`) و Interceptor توکن     |
 | **06** | `06_frontend_components_and_views_structure.md`     | معماری ساختاری ویوها، چرخه حیات کامپوننت‌ها و چیدمان کلاینت SPA               |
 | **07** | `07_frontend_static_server_and_dockerfile.md`       | ساخت سرور استاتیک بدون Nginx با تفکیک 404 واقعی و داکرفایل فرانت‌اند          |
-| **08** | `08_docker_compose_and_backend_containerization.md` | داکرفایل بک‌اند، داکر کامپوز محلی (`local`) و داکر کامپوز سرور (`production`) |
-| **09** | `09_traefik_reverse_proxy_and_ssl.md`               | پیکربندی مسیریابی Traefik، لود بالانسینگ، هدرهای پروکسی و SSL لتس‌انکریپت     |
+| **08** | `08_docker_compose_and_backend_containerization.md` | داکرفایل بک‌اند، استک Docker Swarm تولید و کامپوز محلی                      |
+| **09** | `09_traefik_reverse_proxy_and_ssl.md`               | پیکربندی مسیریابی Traefik روی Swarm، لود بالانسینگ و SSL لتس‌انکریپت          |
 | **10** | `10_database_backup_and_disaster_recovery.md`       | اسکریپت‌های بکاپ اتمیک با flock، تست بازیابی دوره‌ای و سناریوهای بازگردانی     |
 | **11** | `11_ci_cd_github_actions_pipeline.md`               | پایپ‌لاین اتوماتیک ساخت و انتشار ایمیج‌ها در GHCR با تگ‌های معتبر               |
-| **12** | `12_ansible_infrastructure_and_playbooks.md`        | چارچوب کامل Ansible، رول‌های امنیتی، فایروال ضد Lockout، استوریج و رول‌بک      |
+| **12** | `12_ansible_infrastructure_and_playbooks.md`        | چارچوب کامل Ansible، رول‌های امنیتی، Swarm، استقرار، رول‌بک و Teardown        |
 | **13** | `13_verification_and_acceptance_tests.md`           | اجرای آزمون‌های پذیرش جامع A تا G و ارزیابی نهایی سیستم                       |
 | **14** | `14_final_documentation_and_operations.md`          | تولید مستندات عملیاتی، راهنمای ریکاوری، دیکشنری متغیرها و تحویل نهایی        |
 

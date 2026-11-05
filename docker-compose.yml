@@ -1,16 +1,16 @@
 version: '3.8'
 
+# Production Docker Swarm stack.
+# Deploy only through Ansible (ansible/playbooks/site.yml or deploy.yml).
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: ${PROJECT_NAME}_postgres
-    restart: unless-stopped
     environment:
       POSTGRES_DB: ${DB_NAME}
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes:
-      # مسیر Bind Mount ماندگار دیتابیس روی Host سرور
+      # Stateful service: the data directory lives on the Swarm manager node.
       - /srv/${PROJECT_NAME}/postgres/data:/var/lib/postgresql/data
     networks:
       - app-internal
@@ -19,31 +19,27 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-
-  migrate:
-    image: ghcr.io/${GHCR_OWNER}/${GHCR_REPO}/backend:${IMAGE_TAG}
-    container_name: ${PROJECT_NAME}_migrate
-    command: ["node", "src/config/run-migrations.js"]
-    restart: "no"
-    environment:
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_NAME: ${DB_NAME}
-      DB_USER: ${DB_USER}
-      DB_PASSWORD: ${DB_PASSWORD}
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - app-internal
+      start_period: 15s
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      restart_policy:
+        condition: any
+        delay: 5s
+        max_attempts: 5
+        window: 120s
+      update_config:
+        order: stop-first
+        failure_action: pause
 
   backend:
     image: ghcr.io/${GHCR_OWNER}/${GHCR_REPO}/backend:${IMAGE_TAG}
-    restart: unless-stopped
     environment:
       NODE_ENV: production
       PORT: 3000
-      DB_HOST: postgres
+      DB_HOST: ${PROJECT_NAME}_postgres
       DB_PORT: 5432
       DB_NAME: ${DB_NAME}
       DB_USER: ${DB_USER}
@@ -54,47 +50,92 @@ services:
       CSRF_SECRET: ${CSRF_SECRET}
       SHARED_STORAGE_PATH: /srv/portal/uploads
     volumes:
-      # حجم اشتراکی فایل‌ها روی Host
+      # Single-node Swarm: all replicas share the host path.
+      # shortcut: local bind mount, move uploads to shared storage (NFS/S3) before multi-node Swarm.
       - /srv/${PROJECT_NAME}/uploads:/srv/portal/uploads
-    depends_on:
-      migrate:
-        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:3000/health/live || exit 1"]
+      interval: 20s
+      timeout: 4s
+      retries: 3
+      start_period: 10s
     networks:
       - app-internal
       - traefik-public
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.${PROJECT_NAME}_backend.rule=Host(`${DOMAIN}`) && PathPrefix(`/api/`)"
-      - "traefik.http.routers.${PROJECT_NAME}_backend.priority=100"
-      - "traefik.http.routers.${PROJECT_NAME}_backend.entrypoints=websecure"
-      - "traefik.http.routers.${PROJECT_NAME}_backend.tls=true"
-      - "traefik.http.routers.${PROJECT_NAME}_backend.tls.certresolver=letsencrypt"
-      - "traefik.http.services.${PROJECT_NAME}_backend.loadbalancer.server.port=3000"
+    deploy:
+      replicas: ${BACKEND_REPLICAS:-4}
+      update_config:
+        parallelism: 1
+        delay: 10s
+        order: start-first
+        failure_action: rollback
+        monitor: 30s
+      rollback_config:
+        parallelism: 1
+        delay: 10s
+        order: start-first
+        monitor: 30s
+      restart_policy:
+        condition: any
+        delay: 5s
+        max_attempts: 5
+        window: 120s
+      labels:
+        - "traefik.enable=true"
+        - "traefik.swarm.network=traefik-public"
+        - "traefik.http.routers.${PROJECT_NAME}_backend.rule=Host(`${DOMAIN}`) && PathPrefix(`/api/`)"
+        - "traefik.http.routers.${PROJECT_NAME}_backend.priority=100"
+        - "traefik.http.routers.${PROJECT_NAME}_backend.entrypoints=websecure"
+        - "traefik.http.routers.${PROJECT_NAME}_backend.tls=true"
+        - "traefik.http.routers.${PROJECT_NAME}_backend.tls.certresolver=letsencrypt"
+        - "traefik.http.services.${PROJECT_NAME}_backend.loadbalancer.server.port=3000"
 
   frontend:
     image: ghcr.io/${GHCR_OWNER}/${GHCR_REPO}/frontend:${IMAGE_TAG}
-    container_name: ${PROJECT_NAME}_frontend
-    restart: unless-stopped
     environment:
       NODE_ENV: production
       PORT: 8080
       API_BASE_URL: ${API_BASE_URL:-/api/v1}
       PROJECT_NAME: ${PROJECT_NAME}
-    depends_on:
-      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:8080/health/live || exit 1"]
+      interval: 20s
+      timeout: 4s
+      retries: 3
+      start_period: 10s
     networks:
       - traefik-public
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.${PROJECT_NAME}_frontend.rule=Host(`${DOMAIN}`)"
-      - "traefik.http.routers.${PROJECT_NAME}_frontend.priority=10"
-      - "traefik.http.routers.${PROJECT_NAME}_frontend.entrypoints=websecure"
-      - "traefik.http.routers.${PROJECT_NAME}_frontend.tls=true"
-      - "traefik.http.routers.${PROJECT_NAME}_frontend.tls.certresolver=letsencrypt"
-      - "traefik.http.services.${PROJECT_NAME}_frontend.loadbalancer.server.port=8080"
+    deploy:
+      replicas: ${FRONTEND_REPLICAS:-3}
+      update_config:
+        parallelism: 1
+        delay: 10s
+        order: start-first
+        failure_action: rollback
+        monitor: 30s
+      rollback_config:
+        parallelism: 1
+        delay: 10s
+        order: start-first
+        monitor: 30s
+      restart_policy:
+        condition: any
+        delay: 5s
+        max_attempts: 5
+        window: 120s
+      labels:
+        - "traefik.enable=true"
+        - "traefik.swarm.network=traefik-public"
+        - "traefik.http.routers.${PROJECT_NAME}_frontend.rule=Host(`${DOMAIN}`)"
+        - "traefik.http.routers.${PROJECT_NAME}_frontend.priority=10"
+        - "traefik.http.routers.${PROJECT_NAME}_frontend.entrypoints=websecure"
+        - "traefik.http.routers.${PROJECT_NAME}_frontend.tls=true"
+        - "traefik.http.routers.${PROJECT_NAME}_frontend.tls.certresolver=letsencrypt"
+        - "traefik.http.services.${PROJECT_NAME}_frontend.loadbalancer.server.port=8080"
 
 networks:
+  # Both networks are created by the Ansible docker role as attachable overlays.
   app-internal:
-    internal: true
+    external: true
   traefik-public:
     external: true

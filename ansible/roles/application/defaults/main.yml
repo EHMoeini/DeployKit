@@ -1,0 +1,12 @@
+---
+# Non-secret deployment defaults. Secrets come from Ansible Vault or -e.
+app_image_tag: latest
+ghcr_owner: ""
+ghcr_repo: deploy-with-agent
+
+backend_replicas: 4
+frontend_replicas: 3
+
+db_name: liquid_db
+db_user: liquid_user
+db_pool_max: 10

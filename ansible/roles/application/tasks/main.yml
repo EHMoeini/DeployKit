@@ -1,4 +1,16 @@
 ---
+- name: Validate required deployment variables
+  ansible.builtin.assert:
+    that:
+      - ghcr_owner | length > 0
+      - db_password is defined and db_password | length > 0
+      - jwt_secret is defined and jwt_secret | length > 0
+      - refresh_token_secret is defined and refresh_token_secret | length > 0
+      - csrf_secret is defined and csrf_secret | length > 0
+    fail_msg: >-
+      Set ghcr_owner and the application secrets (db_password, jwt_secret,
+      refresh_token_secret, csrf_secret) through Ansible Vault or -e.
+
 - name: Create application directory layout
   ansible.builtin.file:
     path: "{{ item }}"
@@ -9,20 +21,30 @@
   loop:
     - "/srv/{{ project_name }}"
     - "/srv/{{ project_name }}/postgres/data"
-    - "/srv/{{ project_name }}/uploads"
     - "/srv/{{ project_name }}/scripts"
     - "/srv/{{ project_name }}/backups/postgres/daily"
     - "/srv/{{ project_name }}/backups/postgres/monthly"
+
+# The backend image runs as the node user (UID 1000); the bind mount must be
+# writable by that UID so uploads survive container replacement.
+- name: Create uploads directory for the backend runtime user
+  ansible.builtin.file:
+    path: "/srv/{{ project_name }}/uploads"
+    state: directory
+    owner: "1000"
+    group: "1000"
+    mode: "0775"
 
 - name: Set strict 700 permissions on PostgreSQL data directory
   ansible.builtin.file:
     path: "/srv/{{ project_name }}/postgres/data"
     state: directory
-    owner: "999"
-    group: "999"
+    # postgres:16-alpine runs as the Alpine postgres user (UID/GID 70).
+    owner: "70"
+    group: "70"
     mode: "0700"
 
-- name: Copy deployment environment configuration (.env)
+- name: Render deployment environment file
   ansible.builtin.template:
     src: env.j2
     dest: "/srv/{{ project_name }}/.env"
@@ -30,7 +52,7 @@
     group: deployer
     mode: "0600"
 
-- name: Copy docker-compose.yml
+- name: Copy Docker Swarm stack definition
   ansible.builtin.copy:
     src: ../../../docker-compose.yml
     dest: "/srv/{{ project_name }}/docker-compose.yml"
@@ -38,19 +60,181 @@
     group: deployer
     mode: "0644"
 
-- name: Deploy application containers with immutable image tag
-  community.docker.docker_compose_v2:
-    project_src: "/srv/{{ project_name }}"
-    state: present
-    pull: always
-  environment:
-    IMAGE_TAG: "{{ app_image_tag | default('latest') }}"
+- name: Check Docker Swarm state
+  ansible.builtin.command:
+    argv:
+      - docker
+      - info
+      - --format
+      - "{% raw %}{{.Swarm.LocalNodeState}}{% endraw %}"
+  register: application_swarm_state
+  changed_when: false
 
-- name: Wait for backend health check
-  ansible.builtin.uri:
-    url: "http://127.0.0.1:3000/health/ready"
-    status_code: 200
-  register: result
-  until: result.status == 200
-  retries: 12
+- name: Require an active Docker Swarm cluster
+  ansible.builtin.assert:
+    that:
+      - application_swarm_state.stdout == 'active'
+    fail_msg: "Run ansible/playbooks/site.yml first to initialize Docker Swarm."
+
+- name: Log in to GitHub Container Registry
+  community.docker.docker_login:
+    registry: ghcr.io
+    username: "{{ ghcr_owner }}"
+    password: "{{ ghcr_token }}"
+  when: ghcr_token is defined and ghcr_token | length > 0
+  no_log: true
+
+- name: Build the stack deployment environment
+  ansible.builtin.set_fact:
+    stack_environment:
+      PROJECT_NAME: "{{ project_name }}"
+      DOMAIN: "{{ domain }}"
+      ACME_EMAIL: "{{ acme_email | default('admin@' ~ domain) }}"
+      API_BASE_URL: "/api/v1"
+      IMAGE_TAG: "{{ app_image_tag }}"
+      GHCR_OWNER: "{{ ghcr_owner }}"
+      GHCR_REPO: "{{ ghcr_repo }}"
+      DB_NAME: "{{ db_name }}"
+      DB_USER: "{{ db_user }}"
+      DB_PASSWORD: "{{ db_password }}"
+      DB_POOL_MAX: "{{ db_pool_max }}"
+      JWT_SECRET: "{{ jwt_secret }}"
+      REFRESH_TOKEN_SECRET: "{{ refresh_token_secret }}"
+      CSRF_SECRET: "{{ csrf_secret }}"
+      BACKEND_REPLICAS: "{{ backend_replicas }}"
+      FRONTEND_REPLICAS: "{{ frontend_replicas }}"
+
+- name: List existing application stacks
+  ansible.builtin.command:
+    argv:
+      - docker
+      - stack
+      - ls
+      - --format
+      - "{% raw %}{{.Name}}{% endraw %}"
+  register: application_stack_list
+  changed_when: false
+
+# First install: bring up only the data layer before any application replica starts.
+# On upgrades the stack already exists, so migrations run against the live database
+# before the new release is rolled out.
+- name: Bootstrap the stack with application replicas disabled
+  ansible.builtin.command:
+    argv:
+      - docker
+      - stack
+      - deploy
+      - --with-registry-auth
+      - --prune
+      - --compose-file
+      - "/srv/{{ project_name }}/docker-compose.yml"
+      - "{{ project_name }}"
+  environment: "{{ stack_environment | combine({'BACKEND_REPLICAS': '0', 'FRONTEND_REPLICAS': '0'}) }}"
+  when: project_name not in application_stack_list.stdout_lines
+  register: stack_bootstrap
+  changed_when: "'Creating' in stack_bootstrap.stdout or 'Updating' in stack_bootstrap.stdout"
+
+- name: Wait for PostgreSQL readiness on the internal network
+  ansible.builtin.command:
+    argv:
+      - docker
+      - run
+      - --rm
+      - --network
+      - app-internal
+      - postgres:16-alpine
+      - pg_isready
+      - -h
+      - "{{ project_name }}_postgres"
+      - -U
+      - "{{ db_user }}"
+      - -d
+      - "{{ db_name }}"
+  register: postgres_ready
+  until: postgres_ready.rc == 0
+  retries: 60
   delay: 5
+  changed_when: false
+
+- name: Run database migrations with the release image
+  ansible.builtin.command:
+    argv:
+      - docker
+      - run
+      - --rm
+      - --network
+      - app-internal
+      - --env-file
+      - "/srv/{{ project_name }}/.env"
+      - "ghcr.io/{{ ghcr_owner }}/{{ ghcr_repo }}/backend:{{ app_image_tag }}"
+      - node
+      - src/config/run-migrations.js
+  register: migration_result
+  changed_when: true
+
+- name: Deploy the application stack
+  ansible.builtin.command:
+    argv:
+      - docker
+      - stack
+      - deploy
+      - --with-registry-auth
+      - --prune
+      - --compose-file
+      - "/srv/{{ project_name }}/docker-compose.yml"
+      - "{{ project_name }}"
+  environment: "{{ stack_environment }}"
+  register: stack_deploy
+  changed_when: "'Creating' in stack_deploy.stdout or 'Updating' in stack_deploy.stdout"
+
+- name: Wait for PostgreSQL replica to converge
+  ansible.builtin.command:
+    argv: [docker, service, ls, --filter, "name={{ project_name }}_postgres", --format, "{% raw %}{{.Replicas}}{% endraw %}"]
+  register: postgres_service
+  until: postgres_service.stdout == '1/1'
+  retries: 30
+  delay: 5
+  changed_when: false
+
+- name: Wait for backend replicas to converge
+  ansible.builtin.command:
+    argv: [docker, service, ls, --filter, "name={{ project_name }}_backend", --format, "{% raw %}{{.Replicas}}{% endraw %}"]
+  register: backend_service
+  until: backend_service.stdout == (backend_replicas | string) ~ '/' ~ (backend_replicas | string)
+  retries: 40
+  delay: 5
+  changed_when: false
+
+- name: Wait for frontend replicas to converge
+  ansible.builtin.command:
+    argv: [docker, service, ls, --filter, "name={{ project_name }}_frontend", --format, "{% raw %}{{.Replicas}}{% endraw %}"]
+  register: frontend_service
+  until: frontend_service.stdout == (frontend_replicas | string) ~ '/' ~ (frontend_replicas | string)
+  retries: 40
+  delay: 5
+  changed_when: false
+
+- name: Wait for backend readiness on the internal network
+  ansible.builtin.command:
+    argv:
+      - docker
+      - run
+      - --rm
+      - --network
+      - app-internal
+      - "ghcr.io/{{ ghcr_owner }}/{{ ghcr_repo }}/backend:{{ app_image_tag }}"
+      - wget
+      - -qO-
+      - "http://{{ project_name }}_backend:3000/health/ready"
+  register: backend_ready
+  until: backend_ready.rc == 0
+  retries: 30
+  delay: 5
+  changed_when: false
+
+- name: Log deployment to the audit trail
+  ansible.builtin.lineinfile:
+    path: "/srv/{{ project_name }}/deployments.log"
+    line: "[{{ ansible_date_time.iso8601 }}] DEPLOY tag: {{ app_image_tag }} by {{ lookup('env', 'USER') }}"
+    create: true
+    mode: "0640"

@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 
 PROJECT_NAME="${PROJECT_NAME:-liquid-portal}"
-CONTAINER_NAME="${CONTAINER_NAME:-${PROJECT_NAME}_postgres}"
+CONTAINER_NAME="${CONTAINER_NAME:-$(docker ps -q -f "label=com.docker.swarm.service.name=${PROJECT_NAME}_postgres" | head -n 1)}"
 DB_NAME="${DB_NAME:-portal_db}"
 DB_USER="${DB_USER:-portal_user}"
 BACKUP_ROOT="${BACKUP_ROOT:-/srv/${PROJECT_NAME}/backups/postgres}"
@@ -22,9 +22,9 @@ flock -n 200 || { log "ERROR: Another backup process is already running. Exiting
 
 log "Starting automated backup for database '${DB_NAME}'..."
 
-# ۱. بررسی سلامت کانتینر دیتابیس
-if ! docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
-  log "ERROR: Container ${CONTAINER_NAME} is not running! Aborting."
+# ۱. بررسی سلامت کانتینر دیتابیس (نام یا شناسه کانتینر Swarm)
+if [ -z "${CONTAINER_NAME}" ] || [ "$(docker inspect -f '{{.State.Running}}' "${CONTAINER_NAME}" 2>/dev/null || true)" != "true" ]; then
+  log "ERROR: PostgreSQL container '${CONTAINER_NAME:-not-found}' is not running! Aborting."
   exit 1
 fi
 

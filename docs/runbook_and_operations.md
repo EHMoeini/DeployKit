@@ -10,41 +10,41 @@
 برای پایش یکپارچه اجزای سیستم، دستورات زیر در هاست سرور اجرا می‌شوند:
 
 ```bash
-# مشاهده وضعیت تمامی کانتینرها و سلامت Healthcheck آنها
-docker compose ps
+# مشاهده سرویس‌ها، تعداد رپلیکاها و وضعیت سلامت آنها
+docker stack services liquid-portal
 
 # بررسی لاگ‌های لایو Traefik با فیلتر خطاهای HTTP
-docker compose logs -f --tail=100 traefik | grep -E "4[0-9]{2}|5[0-9]{2}"
+docker service logs -f --tail=100 traefik_traefik | grep -E "4[0-9]{2}|5[0-9]{2}"
 
 # بررسی لاگ‌های اپلیکیشن بک‌اند به صورت زنده
-docker compose logs -f --tail=100 backend
+docker service logs -f --tail=100 liquid-portal_backend
 
 # بررسی اتصالات جاری به پایگاه‌داده PostgreSQL
-docker exec -it postgres psql -U ${DB_USER} -d ${DB_NAME} -c "SELECT count(*), state FROM pg_stat_activity GROUP BY state;"
+PG_CONTAINER=$(docker ps -q -f label=com.docker.swarm.service.name=liquid-portal_postgres | head -n 1)
+docker exec -it "$PG_CONTAINER" psql -U ${DB_USER} -d ${DB_NAME} -c "SELECT count(*), state FROM pg_stat_activity GROUP BY state;"
 ```
 
 ---
 
-### ۱.۲. مقیاس‌دهی رپلیکاهای بک‌اند (Scaling)
-به دلیل معماری بدون وضعیت (Stateless) و تزریق `x-pod-id` در پاسخ‌ها، مقیاس‌دهی بدون نیاز به تغییر در پیکربندی پروکسی به سادگی انجام می‌شود:
+### ۱.۲. مقیاس‌دهی رپلیکاهای سرویس‌ها (Scaling)
+مقیاس‌دهی از طریق متغیرهای Ansible انجام می‌شود و Traefik به‌صورت خودکار رپلیکاهای جدید را کشف می‌کند:
 
 ```bash
-# مقیاس‌دهی به ۴ رپلیکا در حالت Production
-docker compose up -d --scale backend=4 --no-recreate
+cd ansible
 
-# بازگشت به ۲ رپلیکا
-docker compose up -d --scale backend=2 --no-recreate
+# مقیاس‌دهی به ۴ رپلیکای بک‌اند و ۳ رپلیکای فرانت‌اند (پیش‌فرض استک)
+ansible-playbook -i inventory/production/hosts.yml playbooks/deploy.yml \
+  -e "image_tag=a1b2c3d backend_replicas=4 frontend_replicas=3"
+
+# تغییر تعداد رپلیکاها بدون تغییر تصویر
+ansible-playbook -i inventory/production/hosts.yml playbooks/deploy.yml \
+  -e "image_tag=a1b2c3d backend_replicas=2 frontend_replicas=2"
 ```
 
 ---
 
 ### ۱.۳. فرآیند اعمال مایگریشن بدون اختلال (Zero-Downtime Migration)
-کانتینر `migrate` به صورت One-off پیاده‌سازی شده و قبل از راه‌اندازی نسخه‌های جدید اجرا می‌گردد:
-
-```bash
-# اجرای ایزوله اسکریپت مایگریشن با همان ایمیج بک‌اند
-docker compose run --rm migrate
-```
+مایگریشن به‌صورت خودکار توسط رول `application` و پیش از roll-out نسخه جدید، با همان ایمیج بک‌اند و روی شبکه داخلی Swarm اجرا می‌شود. اجرای دستی لازم نیست:
 
 ---
 
@@ -54,16 +54,16 @@ docker compose run --rm migrate
 | :---------------------- | :-------------------- | :---------------------------------------------- | :---------------------- | :----------------------------------------- |
 | `NODE_ENV`              | `backend`, `frontend` | حالت اجرای محیط برنامه‌نویسی یا عملیات           | عمومی                   | `production`                               |
 | `PORT`                  | `backend`, `frontend` | پورت داخلی شنیداری وب‌سرور                       | عمومی                   | `3000` (Backend) / `8080` (Frontend)       |
-| `DATABASE_URL`          | `backend`             | رشته اتصال PostgreSQL با استخر اتصالات          | **بسیار حساس (Secret)** | `postgresql://user:pass@postgres:5432/app` |
+| `DB_HOST`               | `backend`             | نام سرویس PostgreSQL در شبکه داخلی Swarm         | عمومی / کانفیگ          | `liquid-portal_postgres`                   |
 | `JWT_SECRET`            | `backend`             | کلید رمزنگاری امضای توکن‌های کوتاه مدت JWT       | **بسیار حساس (Secret)** | رشته تصادفی ۶۴ کاراکتری هگز                |
 | `REFRESH_TOKEN_SECRET`  | `backend`             | کلید تولید توکن‌های رفرش اوپک                    | **بسیار حساس (Secret)** | رشته تصادفی ۶۴ کاراکتری هگز                |
 | `CSRF_SECRET`           | `backend`             | کلید امضای مقادیر محافظت در برابر جعل CSRF      | **حساس (Secret)**       | رشته تصادفی ۳۲ کاراکتری                    |
 | `DB_POOL_MAX`           | `backend`             | سقف اتصالات استخر هر رپلیکای بک‌اند              | عمومی / کانفیگ          | `10`                                       |
-| `UPLOAD_DIR`            | `backend`             | مسیر نگهداری فایل‌های آپلود شده روی سرور         | عمومی                   | `/app/uploads`                             |
-| `MAX_FILE_SIZE_BYTES`   | `backend`             | حداکثر حجم مجاز آپلود به بایت                   | عمومی                   | `5242880` (5MB)                            |
+| `SHARED_STORAGE_PATH`   | `backend`             | مسیر نگهداری فایل‌های آپلود شده روی سرور         | عمومی                   | `/srv/portal/uploads`                      |
+| `MAX_FILE_SIZE_MB`      | `backend`             | حداکثر حجم مجاز آپلود به مگابایت                | عمومی                   | `5`                                        |
 | `DOMAIN`                | `traefik`, `frontend` | دامنه رسمی دسترسی به سیستم                      | عمومی                   | `portal.example.com`                       |
 | `ACME_EMAIL`            | `traefik`             | ایمیل تماس جهت ثبت گواهی Let's Encrypt          | عمومی                   | `admin@example.com`                        |
-| `VITE_API_URL`          | `frontend`            | آدرس پایه API برای کلاینت SPA (تزریق زمان اجرا) | عمومی                   | `/api`                                     |
+| `API_BASE_URL`          | `frontend`            | آدرس پایه API برای کلاینت SPA (تزریق زمان اجرا) | عمومی                   | `/api/v1`                                  |
 | `BACKUP_RETENTION_DAYS` | `scripts`             | تعداد روزهای نگهداری بک‌آپ‌های روزانه             | عمومی                   | `7`                                        |
 
 ---
@@ -106,7 +106,8 @@ $$\sum (R \times P) + W \le \text{max\_connections} - \text{superuser\_reserved}
    ```bash
    LATEST_BACKUP=$(find /srv/liquid-portal/backups/postgres/daily -name "backup_*.dump" | sort -r | head -n 1)
    /srv/liquid-portal/scripts/verify_backup.sh "${LATEST_BACKUP}"
-   docker exec -i liquid-portal_postgres pg_restore -U ${DB_USER} -d ${DB_NAME} --clean --if-exists < "${LATEST_BACKUP}"
+   PG_CONTAINER=$(docker ps -q -f label=com.docker.swarm.service.name=liquid-portal_postgres | head -n 1)
+   docker exec -i "$PG_CONTAINER" pg_restore -U ${DB_USER} -d ${DB_NAME} --clean --if-exists < "${LATEST_BACKUP}"
    ```
 5. بازیابی محتویات دایرکتوری `/srv/liquid-portal/uploads/`.
 6. اعتبارسنجی سیستم با اسکریپت آزمون‌های پذیرش:
@@ -119,7 +120,7 @@ $$\sum (R \times P) + W \le \text{max\_connections} - \text{superuser\_reserved}
 ### ۴.۲. سناریو ۲: رسیدن به سقف نرخ Let's Encrypt (Rate Limit) یا اختلال تمدید SSL
 1. بررسی لاگ Traefik:
    ```bash
-   docker logs traefik | grep acme
+   docker service logs traefik_traefik | grep acme
    ```
 2. در صورتی که دامنه‌ای دچار سقف نرخ موقت شده باشد:
    - فعال‌سازی سرور Staging جهت خطایابی:
@@ -134,13 +135,14 @@ $$\sum (R \times P) + W \le \text{max\_connections} - \text{superuser\_reserved}
    ```bash
    openssl rand -hex 32
    ```
-2. به‌روزرسانی مقدار `JWT_SECRET` در فایل `.env`.
+2. به‌روزرسانی مقدار `JWT_SECRET` در متغیرهای Ansible (Vault یا `-e`).
 3. باطل‌سازی کلیه نشست‌های موجود در دیتابیس:
    ```sql
    TRUNCATE TABLE refresh_tokens;
    ```
-4. ری‌استارت فوری کانتینرهای بک‌اند:
+4. اجرای مجدد استقرار با Ansible؛ تغییر secret باعث roll-out امن رپلیکاهای بک‌اند می‌شود:
    ```bash
-   docker compose restart backend
+   cd ansible
+   ansible-playbook -i inventory/production/hosts.yml playbooks/deploy.yml -e "image_tag=a1b2c3d"
    ```
 5. تمام کاربران به شکل امن از سیستم خارج شده و ملزم به ورود مجدد خواهند بود.

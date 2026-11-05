@@ -1,6 +1,6 @@
-# دستورالعمل ۰۸: کانتینرسازی بک‌اند و ساختارهای Docker Compose محلی و سرور
+# دستورالعمل ۰۸: کانتینرسازی بک‌اند و ساختارهای Docker Compose محلی و استک Docker Swarm تولید
 
-این سند نحوه کانتینرسازی بهینه سرویس Backend، ایجاد فایل `docker-compose.local.yml` برای اجرای تست‌های مقیاس‌پذیری چند Replica به همراه Traefik محلی، و ساخت فایل اصلی `docker-compose.yml` بر پایه ایمیج‌های رجیستری GHCR برای استقرار در سرور را مشخص می‌کند.
+این سند نحوه کانتینرسازی بهینه سرویس Backend، ایجاد فایل `docker-compose.local.yml` برای اجرای تست‌های مقیاس‌پذیری چند Replica به همراه Traefik محلی، و ساخت استک تولید `docker-compose.yml` برای اجرا روی Docker Swarm با ایمیج‌های رجیستری GHCR را مشخص می‌کند.
 
 ---
 
@@ -185,117 +185,23 @@ networks:
 
 ---
 
-### ۲.۳. فایل اصلی استقرار سرور (`docker-compose.yml`)
-این فایل صرفاً از ایمیج‌های رجیستری GHCR استفاده می‌کند و فاقد بخش `build:` است:
+### ۲.۳. استک تولید Docker Swarm (`docker-compose.yml`)
+این فایل صرفاً از ایمیج‌های GHCR استفاده می‌کند و برای `docker stack deploy` طراحی می‌شود. پیاده‌سازی باید این ویژگی‌ها را داشته باشد:
 
-```yaml
-version: '3.8'
-
-services:
-  postgres:
-    image: postgres:16-alpine
-    container_name: ${PROJECT_NAME}_postgres
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: ${DB_NAME}
-      POSTGRES_USER: ${DB_USER}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-    volumes:
-      # مسیر Bind Mount ماندگار دیتابیس روی Host سرور
-      - /srv/${PROJECT_NAME}/postgres/data:/var/lib/postgresql/data
-    networks:
-      - app-internal
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  migrate:
-    image: ghcr.io/${GHCR_OWNER}/${GHCR_REPO}/backend:${IMAGE_TAG}
-    container_name: ${PROJECT_NAME}_migrate
-    command: ["node", "src/config/run-migrations.js"]
-    restart: "no"
-    environment:
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_NAME: ${DB_NAME}
-      DB_USER: ${DB_USER}
-      DB_PASSWORD: ${DB_PASSWORD}
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - app-internal
-
-  backend:
-    image: ghcr.io/${GHCR_OWNER}/${GHCR_REPO}/backend:${IMAGE_TAG}
-    restart: unless-stopped
-    environment:
-      NODE_ENV: production
-      PORT: 3000
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_NAME: ${DB_NAME}
-      DB_USER: ${DB_USER}
-      DB_PASSWORD: ${DB_PASSWORD}
-      DB_POOL_MAX: ${DB_POOL_MAX:-10}
-      JWT_SECRET: ${JWT_SECRET}
-      REFRESH_TOKEN_SECRET: ${REFRESH_TOKEN_SECRET}
-      CSRF_SECRET: ${CSRF_SECRET}
-      SHARED_STORAGE_PATH: /srv/portal/uploads
-    volumes:
-      # حجم اشتراکی فایل‌ها روی Host
-      - /srv/${PROJECT_NAME}/uploads:/srv/portal/uploads
-    depends_on:
-      migrate:
-        condition: service_completed_successfully
-    networks:
-      - app-internal
-      - traefik-public
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.${PROJECT_NAME}_backend.rule=Host(`${DOMAIN}`) && PathPrefix(`/api/`)"
-      - "traefik.http.routers.${PROJECT_NAME}_backend.priority=100"
-      - "traefik.http.routers.${PROJECT_NAME}_backend.entrypoints=websecure"
-      - "traefik.http.routers.${PROJECT_NAME}_backend.tls=true"
-      - "traefik.http.routers.${PROJECT_NAME}_backend.tls.certresolver=letsencrypt"
-      - "traefik.http.services.${PROJECT_NAME}_backend.loadbalancer.server.port=3000"
-
-  frontend:
-    image: ghcr.io/${GHCR_OWNER}/${GHCR_REPO}/frontend:${IMAGE_TAG}
-    container_name: ${PROJECT_NAME}_frontend
-    restart: unless-stopped
-    environment:
-      NODE_ENV: production
-      PORT: 8080
-      API_BASE_URL: ${API_BASE_URL:-/api/v1}
-      PROJECT_NAME: ${PROJECT_NAME}
-    depends_on:
-      - backend
-    networks:
-      - traefik-public
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.${PROJECT_NAME}_frontend.rule=Host(`${DOMAIN}`)"
-      - "traefik.http.routers.${PROJECT_NAME}_frontend.priority=10"
-      - "traefik.http.routers.${PROJECT_NAME}_frontend.entrypoints=websecure"
-      - "traefik.http.routers.${PROJECT_NAME}_frontend.tls=true"
-      - "traefik.http.routers.${PROJECT_NAME}_frontend.tls.certresolver=letsencrypt"
-      - "traefik.http.services.${PROJECT_NAME}_frontend.loadbalancer.server.port=8080"
-
-networks:
-  app-internal:
-    internal: true
-  traefik-public:
-    external: true
-```
+- سرویس فرانت‌اند با ۳ رپلیکا و سرویس بک‌اند با ۴ رپلیکا؛ PostgreSQL تک‌نسخه و pinned به نود manager.
+- استفاده از `deploy.replicas`، `deploy.update_config` با ترتیب `start-first`، `deploy.restart_policy` و `deploy.labels`.
+- حذف `container_name`، `depends_on` و `restart`؛ سرویس یک‌بارمصرف `migrate` در استک وجود ندارد و Migration توسط Ansible اجرا می‌شود.
+- اتصال به دو شبکه overlay خارجی (`app-internal` و `traefik-public`) که Ansible می‌سازد.
+- لیبل‌های Traefik زیر `deploy.labels` و سازگار با swarm provider.
+- Healthcheck برای هر سه سرویس و اتصال بک‌اند به دیتابیس از طریق نام سرویس استک.
+- نگهداری آپلودها روی bind mount میزبان؛ برای استقرار چندنودی باید به shared storage منتقل شود.
 
 ---
 
 ## ۳. قوانین حیاتی مقیاس‌پذیری چند Replica
-1. برای سرویس `backend` هرگز شناسه `container_name` یا بخش `ports` (انتشار پورت روی میزبان) قرار نده.
-2. با اجرای دستور زیر در تست محلی، سیستم بدون خطا با ۳ نمونه Backend بالا می‌آید و Traefik درخواست‌ها را بین آن‌ها لود بالانس می‌کند:
+1. برای سرویس‌های `backend` و `frontend` هرگز `container_name` یا بخش `ports` (انتشار پورت روی میزبان) قرار نده؛ ورودی عمومی فقط از Traefik است.
+2. تعداد رپلیکاها در استک Swarm (۳ فرانت / ۴ بک‌اند) تعیین می‌شود و تغییر آن فقط از طریق Ansible انجام می‌شود.
+3. در تست محلی، سیستم باید بدون خطا با ۳ نمونه Backend بالا بیاید و Traefik درخواست‌ها را بین آن‌ها لود بالانس کند:
    ```bash
    docker compose -f docker-compose.local.yml up -d --scale backend=3
    ```
@@ -305,6 +211,6 @@ networks:
 ## ۴. چک‌لیست اعتبارسنجی گام ۰۸
 - [ ] داکرفایل بک‌اند با ساخت چندمرحله‌ای و بدون ابزارهای بیلد اضافه در مرحله Runner ایجاد شده باشد.
 - [ ] فایل `docker-compose.local.yml` کلیه سرویس‌ها را با بیلد محلی اجرا کند.
-- [ ] فرآیند Migration توسط کانتینر `migrate` به صورت یک‌باره انجام شده و قبل از اجرای `backend` با موفقیت پایان یابد.
+- [ ] Migration توسط Ansible و با ایمیج بک‌اند قبل از roll-out نسخه جدید اجرا شود.
 - [ ] مقیاس‌پذیری با `--scale backend=3` تست شده و ترافیک توسط Traefik توزیع شود.
-- [ ] فایل `docker-compose.yml` فاقد دستور `build:` بوده و آماده دریافت ایمیج‌های GHCR باشد.
+- [ ] فایل `docker-compose.yml` یک استک معتبر Docker Swarm با ۳ رپلیکای فرانت و ۴ رپلیکای بک‌اند، بدون `build:`، `container_name` و `depends_on` باشد.

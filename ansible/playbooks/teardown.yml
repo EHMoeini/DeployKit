@@ -1,0 +1,58 @@
+---
+# Removes the Swarm stacks but keeps persistent data, networks and the Swarm
+# cluster in place. Use this to revert an application deployment safely.
+- name: Tear Down Application Stacks
+  hosts: servers
+  become: true
+  tasks:
+    - name: Remove application stack
+      ansible.builtin.command:
+        argv:
+          - docker
+          - stack
+          - rm
+          - "{{ project_name }}"
+      register: application_stack_rm
+      failed_when: false
+      changed_when: "'Removing' in application_stack_rm.stdout"
+
+    - name: Wait for application stack removal
+      ansible.builtin.command:
+        argv:
+          - docker
+          - stack
+          - ls
+          - --format
+          - "{% raw %}{{.Name}}{% endraw %}"
+      register: application_stacks
+      until: project_name not in application_stacks.stdout_lines
+      retries: 30
+      delay: 5
+      changed_when: false
+
+    - name: Remove Traefik stack when requested
+      ansible.builtin.command:
+        argv:
+          - docker
+          - stack
+          - rm
+          - traefik
+      register: traefik_stack_rm
+      failed_when: false
+      changed_when: "'Removing' in traefik_stack_rm.stdout"
+      when: remove_traefik | default(false) | bool
+
+    - name: Wait for Traefik stack removal
+      ansible.builtin.command:
+        argv:
+          - docker
+          - stack
+          - ls
+          - --format
+          - "{% raw %}{{.Name}}{% endraw %}"
+      register: remaining_stacks
+      until: "'traefik' not in remaining_stacks.stdout_lines"
+      retries: 30
+      delay: 5
+      changed_when: false
+      when: remove_traefik | default(false) | bool

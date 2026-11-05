@@ -1,8 +1,17 @@
 #!/bin/bash
 set -e
 
-echo "[TRAEFIK-SETUP] Creating traefik-public docker network if not exists..."
-docker network create traefik-public 2>/dev/null || echo "[TRAEFIK-SETUP] Network traefik-public already exists."
+echo "[TRAEFIK-SETUP] Checking Docker Swarm state..."
+if ! docker info --format '{{.Swarm.LocalNodeState}}' | grep -q '^active$'; then
+  echo "[TRAEFIK-SETUP] Docker Swarm is not active. Initialize it through Ansible (roles/docker)."
+  exit 1
+fi
+
+echo "[TRAEFIK-SETUP] Creating attachable overlay networks if missing..."
+docker network inspect traefik-public >/dev/null 2>&1 || \
+  docker network create --driver overlay --attachable traefik-public
+docker network inspect app-internal >/dev/null 2>&1 || \
+  docker network create --driver overlay --internal --attachable app-internal
 
 ACME_DIR="/srv/traefik/acme"
 ACME_FILE="${ACME_DIR}/acme.json"

@@ -1,6 +1,6 @@
 # Liquid Portal — Cloud-Native High-Availability Platform
 
-یک سامانه وب مدرن ابری با معماری میکروسرویس مقیاس‌پذیر، احراز هویت توزیع‌شده بدون وضعیت (Stateless)، رابط کاربری SPA با طراحی **Spatial Liquid Glass**، مسیریابی و گواهی امنیتی خودکار Traefik v3، و استقرار خودکار با Ansible و GitHub Actions.
+یک سامانه وب مدرن ابری با معماری مقیاس‌پذیر، احراز هویت توزیع‌شده بدون وضعیت (Stateless)، رابط کاربری SPA با طراحی **Spatial Liquid Glass**، مسیریابی و گواهی امنیتی خودکار Traefik v3، ارکستراسیون **Docker Swarm** و استقرار خودکار با Ansible و GitHub Actions.
 
 ---
 
@@ -8,7 +8,7 @@
 - **عدم استفاده از Redis یا Nginx:** معماری بر مبنای وب‌سرور سبک Node.js و کشینگ کارآمد استوار است و تمامی نیازهای کشینگ و مدیریت سشن‌ها به شکل بهینه و توزیع‌شده بر پایه PostgreSQL و توکن‌های بدون وضعیت مدیریت می‌شوند.
 - **احراز هویت بدون وضعیت (Stateless Auth):** توکن‌های کوتاه مدت JWT در حافظه رم نگهداری شده و چرخش امن Refresh Tokenها با قفل خانواده، مهلت انقضای هم‌زمانی ۱۰ ثانیه‌ای (Grace Period) و شناسایی سوءاستفاده (Theft Detection) پیاده‌سازی شده است.
 - **رابط کاربری شیشه‌ای مایع (Spatial Liquid Glass):** پالت رنگی Obsidian عمیق (`#080B12`)، تایپوگرافی اصیل فارسی وزیرمتن (Vazirmatn)، کارت‌های شیشه‌ای مات ۲۴ پیکسلی، مجسمه سه‌بعدی تعاملی با پارالکس ماوس و تفکیک قطعی شناسه پاد (Pod Identifier) در پایین صفحه.
-- **توزیع ترافیک و SSL خودکار:** مسیریابی پویا با Traefik v3، پشتیبانی از چندین رپلیکای بک‌اند هم‌زمان با الگوریتم Round-Robin و مدیریت خودکار گواهی‌های Let's Encrypt.
+- **توزیع ترافیک و SSL خودکار:** مسیریابی پویا با Traefik v3 روی Docker Swarm، توزیع درخواست‌ها بین ۳ رپلیکای فرانت‌اند و ۴ رپلیکای بک‌اند با الگوریتم Round-Robin و مدیریت خودکار گواهی‌های Let's Encrypt.
 - **تاب‌آوری و بازیابی فاجعه (Disaster Recovery):** اسکریپت‌های پشتیبان‌گیری اتمیک با قفل `flock`، نگهداری الگوی 7/4/6، اعتبارسنجی با هش SHA-256 و محیط شبیه‌سازی ماهانه ری‌استور.
 
 ---
@@ -41,10 +41,10 @@ app/
 │   ├── Dockerfile           # ایمیج چندمرحله‌ای سبک تحت کاربر node
 │   └── package.json
 ├── traefik/
-│   └── docker-compose.yml   # پروکسی معکوس Traefik v3 با لودبالانسر و SSL
+│   └── docker-compose.yml   # استک Swarm پروکسی معکوس Traefik v3 با لودبالانسر و SSL
 ├── ansible/
 │   ├── inventory/           # لیست سرورهای پروداکشن و متغیرها
-│   ├── playbooks/           # پلی‌بوک‌های provisioning، deploy، rollback و audit
+│   ├── playbooks/           # پلی‌بوک‌های provisioning، deploy، rollback و teardown
 │   ├── roles/               # رول‌های ماژولار (common, security, firewall, docker, traefik, ...)
 │   └── ansible.cfg
 ├── scripts/
@@ -59,39 +59,45 @@ app/
 ├── .github/workflows/
 │   └── docker-publish.yml        # پایپ‌لاین انتشار ایمیج‌های تغییرناپذیر در GHCR
 ├── docker-compose.local.yml      # ارکستراسیون محیط توسعه محلی با مقیاس چندرپلیکایی
-└── docker-compose.yml            # تمپلیت استقرار نهایی در محیط سرور
+└── docker-compose.yml            # استک Docker Swarm برای استقرار Production (۳ فرانت / ۴ بک‌اند)
 ```
 
 ---
 
 ## ۳. راه‌اندازی سریع در محیط توسعه محلی
 
-### گام ۱: ساخت شبکه و فایل‌های اولیه
 ```bash
-./scripts/setup-traefik.sh
-```
-
-### گام ۲: اجرای سرویس‌ها با ۳ رپلیکای بک‌اند
-```bash
+# اجرای سرویس‌ها با ۳ رپلیکای بک‌اند (شبکه و Traefik محلی داخل همین فایل ساخته می‌شوند)
 docker compose -f docker-compose.local.yml up -d --build --scale backend=3
-```
 
-### گام ۳: اجرای آزمون‌های پذیرش سیستم
-```bash
-./scripts/run_acceptance_tests.sh http://localhost
+# اجرای آزمون‌های پذیرش؛ در محیط محلی تعداد رپلیکاها را دستی مشخص کنید
+EXPECTED_BACKEND_PODS=3 EXPECTED_FRONTEND_PODS=1 \
+  ./scripts/run_acceptance_tests.sh http://localhost
 ```
 
 ---
 
-## ۴. چرخه استقرار و بازگشت به عقب (Rollback) با Ansible
+## ۴. چرخه استقرار، بازگشت به عقب و Teardown با Ansible
 
-برای ارتقا به یک نسخه پایدار خاص:
+تمام تغییرات روی سرور از طریق Ansible انجام می‌شود؛ هیچ دستور دستی روی سرور لازم نیست.
+استک تولید شامل **۳ رپلیکای فرانت‌اند** و **۴ رپلیکای بک‌اند** است.
+
 ```bash
 cd ansible
+
+# راه‌اندازی اولیه: Docker Swarm، شبکه‌های overlay، Traefik و استک برنامه
+# برای اولین نصب می‌توانید تگ immutable را نیز مشخص کنید
+ansible-playbook -i inventory/production/hosts.yml playbooks/site.yml \
+  -e "image_tag=a1b2c3d"
+
+# استقرار یک نسخه immutable مشخص
 ansible-playbook -i inventory/production/hosts.yml playbooks/deploy.yml -e "image_tag=a1b2c3d"
+
+# بازگشت فوری به نسخه قبلی
+ansible-playbook -i inventory/production/hosts.yml playbooks/rollback.yml
+
+# حذف استک‌ها بدون حذف داده‌ها و شبکه‌ها (برای revert امن)
+ansible-playbook -i inventory/production/hosts.yml playbooks/teardown.yml
 ```
 
-در صورت نیاز به بازگشت فوری به نسخه قبلی:
-```bash
-ansible-playbook -i inventory/production/hosts.yml playbooks/rollback.yml
-```
+> پیش از استقرار، مقدار `ghcr_owner` و متغیرهای حساس `db_password`، `jwt_secret`، `refresh_token_secret` و `csrf_secret` را از طریق Ansible Vault یا `-e` تأمین کنید. برای ایمیج‌های خصوصی GHCR، `ghcr_token` نیز لازم است. تعداد رپلیکاها را می‌توان با `-e "backend_replicas=4 frontend_replicas=3"` تغییر داد.

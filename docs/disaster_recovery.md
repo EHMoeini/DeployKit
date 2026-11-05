@@ -14,14 +14,13 @@
    ```bash
    ls -la /srv/${PROJECT_NAME}/postgres/data
    ```
-3. **راه‌اندازی مجدد کانتینر:**
+3. **راه‌اندازی مجدد سرویس:**
    ```bash
-   cd /srv/${PROJECT_NAME}
-   docker compose up -d postgres
+   docker service update --force liquid-portal_postgres
    ```
 4. **بررسی لاگ‌های راه‌اندازی:**
    ```bash
-   docker compose logs -f postgres
+   docker service logs -f liquid-portal_postgres
    ```
 5. اطمینان حاصل کنید پیام `database system is ready to accept connections` در لاگ درج شده باشد.
 
@@ -33,14 +32,14 @@
 
 ### مراحل اقدام:
 1. **توقف کامل سرویس‌های متصل به دیتابیس:**
-   برای جلوگیری از ایجاد تراکنش‌های متناقض، کانتینرهای بک‌اند را متوقف کنید:
+   برای جلوگیری از ایجاد تراکنش‌های متناقض، رپلیکاهای بک‌اند را متوقف کنید:
    ```bash
-   cd /srv/${PROJECT_NAME}
-   docker compose stop backend
+   docker service scale liquid-portal_backend=0
    ```
 
 2. **ایزوله‌سازی پوشه آسیب‌دیده و آماده‌سازی مسیر جدید:**
    ```bash
+   docker service scale liquid-portal_postgres=0
    mv /srv/${PROJECT_NAME}/postgres/data /srv/${PROJECT_NAME}/postgres/data_corrupt_$(date +%s)
    mkdir -p /srv/${PROJECT_NAME}/postgres/data
    chmod 700 /srv/${PROJECT_NAME}/postgres/data
@@ -48,11 +47,12 @@
 
 3. **راه‌اندازی کانتینر خالی PostgreSQL:**
    ```bash
-   docker compose up -d postgres
+   docker service scale liquid-portal_postgres=1
    ```
    صبر کنید تا کانتینر آماده شود:
    ```bash
-   until docker exec ${PROJECT_NAME}_postgres pg_isready -U ${DB_USER} -d ${DB_NAME}; do sleep 1; done
+   PG_CONTAINER=$(docker ps -q -f label=com.docker.swarm.service.name=liquid-portal_postgres | head -n 1)
+   until docker exec "$PG_CONTAINER" pg_isready -U ${DB_USER} -d ${DB_NAME}; do sleep 1; done
    ```
 
 4. **اعتبارسنجی فایل بکاپ انتخابی:**
@@ -63,22 +63,23 @@
 
 5. **بازیابی تعاریف سراسری و داده‌ها:**
    ```bash
+   PG_CONTAINER=$(docker ps -q -f label=com.docker.swarm.service.name=liquid-portal_postgres | head -n 1)
    LATEST_GLOBALS="${LATEST_BACKUP/backup_/globals_}"
    LATEST_GLOBALS="${LATEST_GLOBALS%.dump}.sql"
 
    if [ -f "${LATEST_GLOBALS}" ]; then
      echo "Restoring global roles and settings..."
-     docker exec -i ${PROJECT_NAME}_postgres psql -U ${DB_USER} -d postgres < "${LATEST_GLOBALS}"
+     docker exec -i "$PG_CONTAINER" psql -U ${DB_USER} -d postgres < "${LATEST_GLOBALS}"
    fi
 
    echo "Restoring database content..."
-   docker exec -i ${PROJECT_NAME}_postgres pg_restore -U ${DB_USER} -d ${DB_NAME} --clean --if-exists < "${LATEST_BACKUP}"
+   docker exec -i "$PG_CONTAINER" pg_restore -U ${DB_USER} -d ${DB_NAME} --clean --if-exists < "${LATEST_BACKUP}"
    ```
 
 6. **راه‌اندازی مجدد سرویس Backend:**
    ```bash
-   docker compose start backend
-   docker compose logs -f backend
+   docker service scale liquid-portal_backend=4
+   docker service logs -f liquid-portal_backend
    ```
 
 7. **تست پذیرش و سلامت سیستم:**

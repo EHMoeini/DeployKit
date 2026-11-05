@@ -10,41 +10,35 @@
 برای پایش یکپارچه کلیه اجزای سیستم، دستورات زیر روی هاست سرور اجرا می‌شوند:
 
 ```bash
-# مشاهده وضعیت تمامی کانتینرها و سلامت Healthcheck آنها
-docker compose ps
+# مشاهده سرویس‌ها و تعداد رپلیکاها
+docker stack services liquid-portal
 
 # بررسی لاگ‌های لایو Traefik با تمرکز بر درخواست‌های دارای خطا
-docker compose logs -f --tail=100 traefik | grep -E "4[0-9]{2}|5[0-9]{2}"
+docker service logs -f --tail=100 traefik_traefik | grep -E "4[0-9]{2}|5[0-9]{2}"
 
 # بررسی لاگ‌های اپلیکیشن بک‌اند به صورت ساخت‌یافته
-docker compose logs -f --tail=100 backend
+docker service logs -f --tail=100 liquid-portal_backend
 
 # بررسی اتصالات جاری به پایگاه‌داده PostgreSQL
-docker exec -it postgres psql -U postgres -c "SELECT count(*), state FROM pg_stat_activity GROUP BY state;"
+PG_CONTAINER=$(docker ps -q -f label=com.docker.swarm.service.name=liquid-portal_postgres | head -n 1)
+docker exec -it "$PG_CONTAINER" psql -U ${DB_USER} -c "SELECT count(*), state FROM pg_stat_activity GROUP BY state;"
 ```
 
 ---
 
-### ۱.۲. مقیاس‌دهی کانتینرهای بک‌اند (Scaling)
-به دلیل معماری کاملاً بدون وضعیت (Stateless)، مقیاس‌دهی بدون نیاز به تغییر در پیکربندی پروکسی به سادگی انجام می‌شود:
+### ۱.۲. مقیاس‌دهی رپلیکاهای سرویس‌ها (Scaling)
+مقیاس‌دهی از طریق متغیرهای Ansible انجام می‌شود و تعداد پیش‌فرض ۳ فرانت و ۴ بک‌اند است:
 
 ```bash
-# مقیاس‌دهی به ۴ رپلیکا در حالت Production
-docker compose up -d --scale backend=4 --no-recreate
-
-# بازگشت به ۲ رپلیکا
-docker compose up -d --scale backend=2 --no-recreate
+cd ansible
+ansible-playbook -i inventory/production/hosts.yml playbooks/deploy.yml \
+  -e "image_tag=a1b2c3d backend_replicas=4 frontend_replicas=3"
 ```
 
 ---
 
 ### ۱.۳. فرآیند اعمال Migration بدون اختلال در سرویس (Zero-Downtime Migration)
-کانتینر `migrate` به صورت One-off پیاده‌سازی شده و قبل از راه‌اندازی نسخه‌های جدید بک‌اند اجرا می‌شود:
-
-```bash
-# اجرای ایزوله اسکریپت مایگریشن با همان ایمیج بک‌اند
-docker compose run --rm migrate
-```
+Migration به‌صورت خودکار توسط رول `application` و پیش از roll-out نسخه جدید اجرا می‌شود. اجرای دستی لازم نیست.
 
 ---
 
@@ -56,16 +50,16 @@ docker compose run --rm migrate
 | :---------------------- | :-------------------- | :----------------------------------------------- | :---------------------- | :----------------------------------------- |
 | `NODE_ENV`              | `backend`, `frontend` | حالت اجرای محیط برنامه‌نویسی یا عملیات            | عمومی                   | `production`                               |
 | `PORT`                  | `backend`, `frontend` | پورت داخلی شنیداری وب‌سرور نود                    | عمومی                   | `3000` (Backend) / `8080` (Frontend)       |
-| `DATABASE_URL`          | `backend`             | رشته اتصال PostgreSQL با اتصال مستقیم استخر      | **بسیار حساس (Secret)** | `postgresql://user:pass@postgres:5432/app` |
+| `DB_HOST`               | `backend`             | نام سرویس PostgreSQL در شبکه داخلی Swarm         | عمومی / کانفیگ          | `liquid-portal_postgres`                   |
 | `JWT_SECRET`            | `backend`             | کلید رمزنگاری امضای توکن‌های کوتاه مدت JWT        | **بسیار حساس (Secret)** | مقدار تصادفی ۶۴ کاراکتری هگز               |
-| `COOKIE_SECRET`         | `backend`             | کلید امضای کوکی‌های مرورگر                        | **بسیار حساس (Secret)** | مقدار تصادفی ۳۲ کاراکتری                   |
+| `REFRESH_TOKEN_SECRET`  | `backend`             | کلید تولید توکن‌های رفرش                          | **بسیار حساس (Secret)** | مقدار تصادفی ۶۴ کاراکتری هگز               |
 | `CSRF_SECRET`           | `backend`             | کلید تولید هش توکن‌های ضد جعل Double Submit       | **حساس (Secret)**       | رشته ۳۲ کاراکتری تصادفی                    |
 | `DB_POOL_MAX`           | `backend`             | حداکثر اتصال استخر هر رپلیکا                     | عمومی / کانفیگ          | `10`                                       |
-| `UPLOAD_DIR`            | `backend`             | مسیر مطلق نگهداری فایل‌های آپلود شده              | عمومی                   | `/app/uploads`                             |
-| `MAX_FILE_SIZE_BYTES`   | `backend`             | سقف مجاز اندازه آپلود فایل به بایت               | عمومی                   | `5242880` (5MB)                            |
+| `SHARED_STORAGE_PATH`   | `backend`             | مسیر مطلق نگهداری فایل‌های آپلود شده              | عمومی                   | `/srv/portal/uploads`                      |
+| `MAX_FILE_SIZE_MB`      | `backend`             | سقف مجاز اندازه آپلود فایل به مگابایت            | عمومی                   | `5`                                        |
 | `DOMAIN`                | `traefik`, `frontend` | دامنه رسمی دسترسی به سیستم                       | عمومی                   | `portal.example.com`                       |
 | `ACME_EMAIL`            | `traefik`             | ایمیل تماس ثبت گواهی Let's Encrypt               | عمومی                   | `admin@example.com`                        |
-| `VITE_API_URL`          | `frontend`            | آدرس پایه API برای کلاینت SPA (تزریق در runtime) | عمومی                   | `/api`                                     |
+| `API_BASE_URL`          | `frontend`            | آدرس پایه API برای کلاینت SPA (تزریق در runtime) | عمومی                   | `/api/v1`                                  |
 | `BACKUP_RETENTION_DAYS` | `scripts`             | تعداد روزهای نگهداری بک‌آپ‌های روزانه              | عمومی                   | `7`                                        |
 
 ---
@@ -116,7 +110,7 @@ $$\sum (R \times P) + W \le \text{max\_connections} - \text{superuser\_reserved}
 ### ۴.۲. سناریو ۲: رسیدن به سقف نرخ Let's Encrypt (Rate Limit) یا خطای تمدید SSL
 1. بررسی لاگ Traefik:
    ```bash
-   docker logs traefik | grep acme
+   docker service logs traefik_traefik | grep acme
    ```
 2. در صورتی که دامنه‌ای دچار Rate Limit شده باشد:
    - پیکربندی موقت Traefik برای استفاده از Staging CA جهت عیب‌یابی:
@@ -136,9 +130,10 @@ $$\sum (R \times P) + W \le \text{max\_connections} - \text{superuser\_reserved}
    ```sql
    TRUNCATE TABLE refresh_tokens;
    ```
-3. ری‌استارت فوری رپلیکاهای بک‌اند:
+3. استقرار را با Ansible مجدداً اجرا کنید تا secret جدید روی تمام رپلیکاها اعمال شود:
    ```bash
-   docker compose restart backend
+   cd ansible
+   ansible-playbook -i inventory/production/hosts.yml playbooks/deploy.yml -e "image_tag=a1b2c3d"
    ```
 4. تمامی کاربران ملزم به ورود مجدد امن خواهند بود.
 

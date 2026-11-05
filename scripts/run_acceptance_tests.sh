@@ -3,6 +3,8 @@ set -euo pipefail
 
 BASE_URL="${1:-http://localhost}"
 API_URL="${BASE_URL}/api"
+EXPECTED_BACKEND_PODS="${EXPECTED_BACKEND_PODS:-4}"
+EXPECTED_FRONTEND_PODS="${EXPECTED_FRONTEND_PODS:-3}"
 GREEN='\033[0;32m'
 RED='\033[0;31m'
 NC='\033[0m'
@@ -100,9 +102,36 @@ else
 fi
 
 # -----------------------------------------------------------------------------
-# Test A: مقیاس‌پذیری چند رپلیکایی بک‌اند (Stateless Verification)
+# Test A: مقیاس‌پذیری چند رپلیکایی و توزیع ترافیک (Stateless Verification)
 # -----------------------------------------------------------------------------
-echo -e "\n--- [Test A] ارزیابی رفتار بدون وضعیت در مقیاس چند رپلیکایی ---"
+echo -e "\n--- [Test A] ارزیابی توزیع ترافیک بین رپلیکاها و رفتار بدون وضعیت ---"
+
+pod_id() {
+  curl -s -D - -o /dev/null "$1" | tr -d '\r' | awk -F': ' 'tolower($1)=="x-pod-id"{print $2}'
+}
+
+declare -A BACKEND_PODS=()
+for i in {1..16}; do
+  POD=$(pod_id "${API_URL}/v1/health/live")
+  [[ -n "${POD}" ]] && BACKEND_PODS["${POD}"]=1
+done
+if (( ${#BACKEND_PODS[@]} >= EXPECTED_BACKEND_PODS )); then
+  test_pass "ترافیک API بین ${#BACKEND_PODS[@]} رپلیکای بک‌اند توزیع شد (انتظار: ${EXPECTED_BACKEND_PODS})."
+else
+  test_fail "فقط ${#BACKEND_PODS[@]} رپلیکای بک‌اند پاسخ داد؛ انتظار ${EXPECTED_BACKEND_PODS} رپلیکا بود."
+fi
+
+declare -A FRONTEND_PODS=()
+for i in {1..12}; do
+  POD=$(pod_id "${BASE_URL}/health/live")
+  [[ -n "${POD}" ]] && FRONTEND_PODS["${POD}"]=1
+done
+if (( ${#FRONTEND_PODS[@]} >= EXPECTED_FRONTEND_PODS )); then
+  test_pass "ترافیک صفحات بین ${#FRONTEND_PODS[@]} رپلیکای فرانت‌اند توزیع شد (انتظار: ${EXPECTED_FRONTEND_PODS})."
+else
+  test_fail "فقط ${#FRONTEND_PODS[@]} رپلیکای فرانت‌اند پاسخ داد؛ انتظار ${EXPECTED_FRONTEND_PODS} رپلیکا بود."
+fi
+
 for i in {1..5}; do
   PROFILE_RES=$(curl -s -b /tmp/cookies.txt -X GET "${API_URL}/user/me" \
     -H "Authorization: Bearer ${ACCESS_TOKEN}")
@@ -164,10 +193,14 @@ elif [[ -f "../scripts/backup_postgres.sh" ]]; then
 fi
 
 if [[ -n "${BACKUP_SCRIPT}" ]]; then
-  # تطبیق نام کانتینر و مسیر فایل‌ها بر اساس محیط اجرای فعلی
-  PG_CONTAINER="liquid-portal_postgres"
-  if docker ps --format '{{.Names}}' | grep -q "^local_postgres$"; then
-    PG_CONTAINER="local_postgres"
+  # تطبیق نام/شناسه کانتینر و مسیر فایل‌ها بر اساس محیط اجرای فعلی
+  PG_CONTAINER="$(docker ps -q -f "label=com.docker.swarm.service.name=${PROJECT_NAME:-liquid-portal}_postgres" | head -n 1)"
+  if [[ -z "${PG_CONTAINER}" ]]; then
+    if docker ps --format '{{.Names}}' | grep -q "^local_postgres$"; then
+      PG_CONTAINER="local_postgres"
+    else
+      PG_CONTAINER="${PROJECT_NAME:-liquid-portal}_postgres"
+    fi
   fi
 
   if [[ -w "/srv" ]]; then

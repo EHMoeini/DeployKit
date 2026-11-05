@@ -1,6 +1,6 @@
 # دستورالعمل ۱۲: چارچوب جامع مدیریت زیرساخت و استقرار با Ansible
 
-این سند پیاده‌سازی کامل چارچوب Ansible در دایرکتوری `ansible/`، شامل ساختار ماژولار رول‌ها، Inventory چند محیطی، فایروال هوشمند ضد قفل شدن SSH (Anti-Lockout)، رول‌های امنیتی، ممیزی ایمن دیسک و چرخه Playbookهای استقرار، ارتقا و بازگشت به عقب (Rollback) را شرح می‌دهد.
+این سند پیاده‌سازی کامل چارچوب Ansible در دایرکتوری `ansible/`، شامل ساختار ماژولار رول‌ها، Inventory چند محیطی، فایروال هوشمند ضد قفل شدن SSH (Anti-Lockout)، رول‌های امنیتی، ممیزی ایمن دیسک، راه‌اندازی Docker Swarm، چرخه Playbookهای استقرار، ارتقا، بازگشت به عقب (Rollback) و حذف قابل بازگشت (Teardown) را شرح می‌دهد.
 
 ---
 
@@ -81,9 +81,9 @@ all:
 | `security`     | پیکربندی SSH سخت‌گیرانه (غیرفعال‌سازی ورود با پسورد و ورود مستقیم root)، نصب `fail2ban`.           |
 | `firewall`     | پیاده‌سازی فایروال با سیاست Default Deny، مکانیزم Anti-Lockout و سازگاری با زنجیره `DOCKER-USER`. |
 | `storage`      | ممیزی ایمن دیسک، بررسی Persistent/Ephemeral بودن پارتیشن‌ها بدون اعمال تغییر ناخواسته.            |
-| `docker`       | نصب رسمی Docker Engine، پیکربندی لاگ‌چرخشی داکر و فعال‌سازی سرویس.                                 |
-| `traefik`      | ایجاد شبکه `traefik-public`، فایل `acme.json` با دسترسی `600` و استقرار Traefik.                 |
-| `application`  | استقرار کانتینرهای برنامه بر پایه `docker-compose.yml` و اجرای Migration.                        |
+| `docker`       | نصب رسمی Docker Engine و Python SDK، راه‌اندازی Docker Swarm و ساخت شبکه‌های overlay (`app-internal`, `traefik-public`). |
+| `traefik`      | آماده‌سازی `acme.json` با دسترسی `600` و استقرار استک Traefik روی نود manager.                     |
+| `application`  | استقرار استک برنامه با ۳ رپلیکای فرانت و ۴ رپلیکای بک‌اند، اجرای Migration و بررسی سلامت.          |
 | `backup`       | راه‌اندازی تایمرهای Systemd روی Host برای اجرای منظم اسکریپت‌های پشتیبان‌گیری.                      |
 | `watchtower`   | رول اختیاری آپدیت کانتینرها (در Production برای اپلیکیشن غیرفعال است).                           |
 
@@ -183,48 +183,13 @@ all:
 
 ---
 
-### ۲.۷. چرخه استقرار، ارتقا و بازگشت به عقب (`ansible/playbooks/rollback.yml`)
-این پلی‌بوک بازگردانی نسخه قبلی را بدون نیاز به ادیت دستی فایل‌ها انجام می‌دهد:
-
-```yaml
----
-- name: Instant Application Rollback
-  hosts: servers
-  become: true
-  vars_prompt:
-    - name: target_rollback_tag
-      prompt: "Enter the Target Git Short-SHA / Image Tag to roll back to"
-      private: false
-  tasks:
-    - name: Validate rollback tag input
-      ansible.builtin.assert:
-        that:
-          - target_rollback_tag is defined
-          - target_rollback_tag | length > 0
-        fail_msg: "Rollback target tag cannot be empty!"
-
-    - name: Deploy application with rollback tag
-      ansible.builtin.include_role:
-        name: application
-      vars:
-        app_image_tag: "{{ target_rollback_tag }}"
-
-    - name: Run health check validation after rollback
-      ansible.builtin.uri:
-        url: "http://127.0.0.1:3000/health/ready"
-        status_code: 200
-      register: health_check
-      until: health_check.status == 200
-      retries: 6
-      delay: 5
-
-    - name: Log Rollback event to Audit Trail
-      ansible.builtin.lineinfile:
-        path: "/srv/{{ project_name }}/deployments.log"
-        line: "[{{ ansible_date_time.iso8601 }}] ROLLBACK to tag: {{ target_rollback_tag }} by {{ lookup('env', 'USER') }}"
-        create: true
-        mode: '0640'
-```
+### ۲.۷. چرخه استقرار، ارتقا، بازگشت و Teardown
+- `site.yml` زیرساخت را آماده می‌کند: نصب Docker و SDK پایتون، راه‌اندازی Docker Swarm، ساخت شبکه‌های overlay، استقرار Traefik، نصب بکاپ و در نهایت استقرار استک برنامه.
+- `deploy.yml` فقط استک برنامه را با تگ immutable به‌روزرسانی می‌کند؛ رول `application` پیش از roll-out، Migration را با همان ایمیج اجرا می‌کند و سپس ۳ رپلیکای فرانت‌اند و ۴ رپلیکای بک‌اند را با rolling update (ترتیب `start-first`) مستقر می‌کند.
+- رول `application` پس از استقرار، converge شدن تعداد رپلیکاها و سلامت بک‌اند را از داخل شبکه داخلی بررسی می‌کند.
+- `rollback.yml` تگ هدف را از اپراتور می‌گیرد و همان رول را با ایمیج قدیمی اجرا می‌کند؛ در صورت شکست healthcheck، عملیات ناموفق گزارش می‌شود.
+- `teardown.yml` استک‌ها را حذف می‌کند اما داده‌ها، شبکه‌ها و Swarm را دست‌نخورده نگه می‌دارد تا revert امن باشد.
+- کلیدهای حساس از Ansible Vault یا `-e` تأمین می‌شوند؛ در صورت نبود، رول با پیام واضح متوقف می‌شود.
 
 ---
 
@@ -233,4 +198,6 @@ all:
 - [ ] تست اجرای `storage-audit.yml` بدون ایجاد هیچ‌گونه تغییر روی دیسک اجرا شود.
 - [ ] رول `firewall` پورت SSH را به عنوان اولین قانون تثبیت کرده و از Lockout جلوگیری نماید.
 - [ ] فایل `ansible.cfg` از فایل Vault خارج از Git پشتیبانی کند.
-- [ ] پلی‌بوک `rollback.yml` امکان دریافت تگ کامیت قبلی و اعمال سریع آن را فراهم سازد.
+- [ ] رول `docker` به‌صورت idempotent سوئرم را راه‌اندازی کرده و شبکه‌های overlay را بسازد.
+- [ ] استقرار، Migration، بررسی سلامت و تعداد رپلیکاها (۳ فرانت / ۴ بک‌اند) کاملاً از طریق Ansible انجام شود.
+- [ ] پلی‌بوک `rollback.yml` امکان دریافت تگ قبلی و پلی‌بوک `teardown.yml` امکان حذف امن استک‌ها را فراهم کند.

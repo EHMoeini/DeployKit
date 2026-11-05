@@ -34,7 +34,7 @@
 set -Eeuo pipefail
 
 PROJECT_NAME="${PROJECT_NAME:-liquid-portal}"
-CONTAINER_NAME="${PROJECT_NAME}_postgres"
+CONTAINER_NAME="${CONTAINER_NAME:-$(docker ps -q -f "label=com.docker.swarm.service.name=${PROJECT_NAME}_postgres" | head -n 1)}"
 DB_NAME="${DB_NAME:-portal_db}"
 DB_USER="${DB_USER:-portal_user}"
 BACKUP_ROOT="/srv/${PROJECT_NAME}/backups/postgres"
@@ -54,9 +54,9 @@ flock -n 200 || { log "ERROR: Another backup process is already running. Exiting
 
 log "Starting automated backup for database '${DB_NAME}'..."
 
-# ۱. بررسی سلامت کانتینر دیتابیس
-if ! docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
-  log "ERROR: Container ${CONTAINER_NAME} is not running! Aborting."
+# ۱. بررسی سلامت کانتینر دیتابیس (نام یا شناسه کانتینر Swarm)
+if [ -z "${CONTAINER_NAME}" ] || [ "$(docker inspect -f '{{.State.Running}}' "${CONTAINER_NAME}" 2>/dev/null || true)" != "true" ]; then
+  log "ERROR: PostgreSQL container '${CONTAINER_NAME:-not-found}' is not running! Aborting."
   exit 1
 fi
 
@@ -196,39 +196,9 @@ echo "[RESTORE-TEST] Verification succeeded! Found ${USER_COUNT} users in restor
 ---
 
 ### ۲.۵. سناریوهای بازیابی اضطراری (Disaster Recovery Runbooks)
-
-#### سناریوی اول: کانتینر حذف شده اما دایرکتوری `PGDATA` روی Host سالم است
-1. هرگز فایل‌های بکاپ را روی `PGDATA` کپی نکن.
-2. با اجرای فرمان زیر کانتینر را مجدداً ایجاد کن تا دیتابیس قبلی را مستقیماً لود نماید:
-   ```bash
-   docker compose up -d postgres
-   docker compose logs -f postgres
-   ```
-3. بررسی کن که خطای Database Initialization رخ ندهد و داده‌ها سالم باشند.
-
-#### سناریوی دوم: داده‌های `PGDATA` کاملاً خراب یا حذف شده‌اند
-1. فوراً کانتینرهای Backend را متوقف کن:
-   ```bash
-   docker compose stop backend
-   ```
-2. از پوشه خراب یک کپی تهیه کن و یک پوشه تمیز بساز:
-   ```bash
-   mv /srv/${PROJECT_NAME}/postgres/data /srv/${PROJECT_NAME}/postgres/data_corrupt_$(date +%s)
-   mkdir -p /srv/${PROJECT_NAME}/postgres/data
-   ```
-3. کانتینر خالی PostgreSQL را بالا بیاور:
-   ```bash
-   docker compose up -d postgres
-   ```
-4. فایل Globals و فایل `.dump` را Restore کن:
-   ```bash
-   docker exec -i ${PROJECT_NAME}_postgres psql -U ${DB_USER} -d postgres < /srv/${PROJECT_NAME}/backups/postgres/daily/globals_LATEST.sql
-   docker exec -i ${PROJECT_NAME}_postgres pg_restore -U ${DB_USER} -d ${DB_NAME} --clean /srv/${PROJECT_NAME}/backups/postgres/daily/backup_LATEST.dump
-   ```
-5. کانتینر Backend را مجدداً راه‌اندازی کن:
-   ```bash
-   docker compose start backend
-   ```
+- **سناریوی اول (کانتینر حذف شده اما PGDATA سالم است):** سرویس PostgreSQL را از طریق Ansible یا `docker service` مجدداً راه‌اندازی کن و هرگز بکاپ را روی داده زنده بازگردانی نکن.
+- **سناریوی دوم (PGDATA خراب یا حذف شده):** ابتدا رپلیکاهای بک‌اند را از سرویس Swarm خارج کن، دایرکتوری خراب را ایزوله کن، سرویس PostgreSQL را با دایرکتوری خالی بالا بیاور، سپس globals و dump را با شناسه task دیتابیس ری‌استور کن و بک‌اند را به ۴ رپلیکا برگردان.
+- در Swarm نام ثابت کانتینر وجود ندارد؛ عملیات باید از طریق Ansible یا با شناسه پویای task انجام شود.
 
 ---
 
