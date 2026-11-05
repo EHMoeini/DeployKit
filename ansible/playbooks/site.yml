@@ -18,3 +18,4 @@
     app_image_tag: "{{ image_tag | default('latest') }}"
   roles:
     - application
+    - watchtower

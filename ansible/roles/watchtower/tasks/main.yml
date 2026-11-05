@@ -1,4 +1,89 @@
 ---
-- name: Note about Watchtower in Production
-  ansible.builtin.debug:
-    msg: "Watchtower is disabled for application containers to ensure immutable deployments. It may only monitor Traefik if configured."
+- name: Install the Swarm auto-updater on the manager
+  when: inventory_hostname == groups['servers'][0]
+  block:
+    - name: Validate auto-update settings
+      ansible.builtin.assert:
+        that:
+          - ghcr_owner | length > 0
+          - auto_update_interval | length > 0
+          - auto_update_tag | length > 0
+        fail_msg: "ghcr_owner, auto_update_interval and auto_update_tag must be set."
+
+    - name: Check whether this node can manage Swarm services
+      ansible.builtin.command:
+        argv:
+          - docker
+          - info
+          - --format
+          - "{% raw %}{{.Swarm.ControlAvailable}}{% endraw %}"
+      register: watchtower_control_available
+      changed_when: false
+
+    - name: Require a Swarm manager for the auto-updater
+      ansible.builtin.assert:
+        that:
+          - watchtower_control_available.stdout == 'true'
+        fail_msg: >-
+          The auto-updater mutates Swarm services, so it must run on a manager.
+          groups['servers'][0] is not a Swarm manager in this inventory.
+
+    - name: Ensure updater script directory exists
+      ansible.builtin.file:
+        path: "/srv/{{ project_name }}/scripts"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Ensure the shared deployment lock file exists
+      ansible.builtin.file:
+        path: "/srv/{{ project_name }}/.deploy.lock"
+        state: touch
+        owner: root
+        group: root
+        mode: "0600"
+        modification_time: preserve
+        access_time: preserve
+
+    - name: Install the Swarm auto-updater script
+      ansible.builtin.copy:
+        src: watchtower.sh
+        dest: "/srv/{{ project_name }}/scripts/watchtower.sh"
+        owner: root
+        group: root
+        mode: "0750"
+
+    - name: Render the auto-updater environment
+      ansible.builtin.template:
+        src: watchtower.env.j2
+        dest: "/srv/{{ project_name }}/watchtower.env"
+        owner: root
+        group: root
+        mode: "0640"
+
+    - name: Render the auto-updater systemd service
+      ansible.builtin.template:
+        src: watchtower.service.j2
+        dest: "/etc/systemd/system/{{ project_name }}-watchtower.service"
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Render the auto-updater systemd timer
+      ansible.builtin.template:
+        src: watchtower.timer.j2
+        dest: "/etc/systemd/system/{{ project_name }}-watchtower.timer"
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Reload systemd units
+      ansible.builtin.systemd:
+        daemon_reload: true
+
+    - name: Enable and start the auto-updater timer
+      ansible.builtin.systemd:
+        name: "{{ project_name }}-watchtower.timer"
+        state: "{{ 'started' if auto_update_enabled | bool else 'stopped' }}"
+        enabled: "{{ auto_update_enabled | bool }}"

@@ -1,0 +1,12 @@
+---
+# Swarm-native auto-update agent (the "watchtower" role).
+#
+# Upstream Watchtower manages standalone containers only. Running it against
+# Swarm task containers causes the tasks to be recreated outside the service
+# and then killed by the Swarm reconciler. This role therefore installs a
+# small Swarm-aware updater with the same contract: detect a new image digest
+# in GHCR and trigger `docker service update`, which performs a rolling update
+# according to the service update_config.
+auto_update_enabled: true
+auto_update_interval: "5min"
+auto_update_tag: "latest"

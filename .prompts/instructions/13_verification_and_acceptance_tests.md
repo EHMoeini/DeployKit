@@ -21,6 +21,7 @@
 | **Test E**  | تفکیک SPA Fallback و فایل‌های گمشده | فراخوانی مسیر تمیز در برابر فایل مفقود        | مسیر `/dashboard` کد HTTP 200 با `index.html` برمی‌گرداند؛ اما مسیر `/assets/fake.png` دقیقاً HTTP 404 بازمی‌گرداند.             |
 | **Test F**  | اعتبارسنجی پشتیبان‌گیری و بازیابی   | اجرای بک‌آپ و ری‌استور روی دیتابیس ایزوله       | هش SHA-256 تأیید شود، ساختار دیتابیس و داده‌ها در کانتینر موقت بازیابی شده و تعداد رکوردهای جدول‌ها برابر باشد.                 |
 | **Test G**  | تکرارپذیری Ansible و امنیت شبکه    | اجرای دوبار پلی‌بوک Ansible و اسکن پورت‌ها      | در اجرای دوم taskهای سالم بازسازی نشوند، پورت ۵۴۳۲ از بیرون بسته باشد و فایروال فعال بماند.                                   |
+| **Test H**  | به‌روزرسانی خودکار و عدم تداخل      | انتشار یک بیلد جدید در GHCR و اجرای هم‌زمان/متوالی Ansible | عامل خودکار دیجست جدید را تشخیص دهد، Migration و rolling update انجام شود و برای همان انتشار فقط یک بار update رخ دهد. |
 
 ---
 
@@ -220,6 +221,32 @@ echo -e "=========================================================="
    ```
 3. اطمینان حاصل کنید Swarm task جدید می‌سازد و هیچ خطای ۵۰۲ از سوی Traefik به کلاینت منعکس نمی‌شود.
 
+### ۴.۳. ارزیابی Test H (به‌روزرسانی خودکار و عدم تداخل با Ansible)
+1. بررسی نصب و فعال بودن عامل خودکار پس از اولین `site.yml`:
+   ```bash
+   systemctl is-enabled liquid-portal-watchtower.timer
+   systemctl is-active liquid-portal-watchtower.timer
+   ```
+2. ثبت دیجست فعلی سرویس‌ها:
+   ```bash
+   docker service inspect liquid-portal_backend \
+     --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}'
+   docker service inspect liquid-portal_frontend \
+     --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}'
+   ```
+3. یک تغییر کوچک به `main` push کنید و منتظر انتشار `latest` در GHCR بمانید؛ سپس یک چرخه دستی اجرا کنید:
+   ```bash
+   sudo systemctl start liquid-portal-watchtower.service
+   tail -n 50 /srv/liquid-portal/auto-update.log
+   ```
+4. معیار قبولی:
+   - لاگ شامل تشخیص دیجست جدید، اجرای Migration و `updating ..._backend` باشد.
+   - رپلیکاها یک‌به‌یک و با `start-first` جایگزین شوند و در حین update هیچ خطای ۵۰۲/۵۰۳ مشاهده نشود.
+   - اجرای مجدد چرخه، پیام `is up to date` بدهد و update دوباره انجام نشود.
+   - اگر همان انتشار از طریق `deploy.yml` هم اجرا شود، برای آن انتشار rolling update تکراری رخ ندهد.
+5. آزمون قفل: حین اجرای `deploy.yml`، چرخه خودکار باید با پیام `deploy lock is held by Ansible` یا `Ansible deployment is in progress` رد شود و هیچ تغییری اعمال نکند.
+6. آزمون Rollback: با `rollback.yml` به `<short-sha>` برگردید؛ چرخه خودکار باید پیام `auto-update paused` بدهد و سرویس را جلو نبرد.
+
 ---
 
 ## ۵. چک‌لیست اعتبارسنجی نهایی گام ۱۳
@@ -229,3 +256,6 @@ echo -e "=========================================================="
 - [ ] بازه ۱۰ ثانیه‌ای Grace Period برای هم‌زمانی کلاینت‌ها بدون خطا عبور کند.
 - [ ] سوءاستفاده از رفرش توکن قدیمی کل سشن خانواده را مسدود کند.
 - [ ] سیستم پس از ری‌استارت کانتینرها دیتای دیسک و دیتابیس را بدون کم‌وکاست حفظ نماید.
+- [ ] عامل به‌روزرسانی خودکار پس از اولین `site.yml` فعال باشد و دیجست جدید GHCR را با rolling update اعمال کند.
+- [ ] قفل `.deploy.lock` و پرچم `.deploy-in-progress` از تداخل هم‌زمان Ansible و عامل خودکار جلوگیری کنند.
+- [ ] برای یک انتشار واحد، فقط یک rolling update رخ دهد و سرویس pin‌شده به `<short-sha>` به‌صورت خودکار جلو نرود.

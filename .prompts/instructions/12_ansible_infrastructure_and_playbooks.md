@@ -85,7 +85,7 @@ all:
 | `traefik`      | آماده‌سازی `acme.json` با دسترسی `600` و استقرار استک Traefik روی نود manager.                     |
 | `application`  | استقرار استک برنامه با ۳ رپلیکای فرانت و ۴ رپلیکای بک‌اند، اجرای Migration و بررسی سلامت.          |
 | `backup`       | راه‌اندازی تایمرهای Systemd روی Host برای اجرای منظم اسکریپت‌های پشتیبان‌گیری.                      |
-| `watchtower`   | رول اختیاری آپدیت کانتینرها (در Production برای اپلیکیشن غیرفعال است).                           |
+| `watchtower`   | نصب عامل به‌روزرسانی خودکار سازگار با Swarm روی نود manager؛ بررسی دوره‌ای GHCR، اجرای Migration و `docker service update` با rolling update. |
 
 ---
 
@@ -184,12 +184,42 @@ all:
 ---
 
 ### ۲.۷. چرخه استقرار، ارتقا، بازگشت و Teardown
-- `site.yml` زیرساخت را آماده می‌کند: نصب Docker و SDK پایتون، راه‌اندازی Docker Swarm، ساخت شبکه‌های overlay، استقرار Traefik، نصب بکاپ و در نهایت استقرار استک برنامه.
-- `deploy.yml` فقط استک برنامه را با تگ immutable به‌روزرسانی می‌کند؛ رول `application` پیش از roll-out، Migration را با همان ایمیج اجرا می‌کند و سپس ۳ رپلیکای فرانت‌اند و ۴ رپلیکای بک‌اند را با rolling update (ترتیب `start-first`) مستقر می‌کند.
+- `site.yml` زیرساخت را آماده می‌کند: نصب Docker و SDK پایتون، راه‌اندازی Docker Swarm، ساخت شبکه‌های overlay، استقرار Traefik، نصب بکاپ، استقرار استک برنامه و در نهایت نصب عامل به‌روزرسانی خودکار.
+- `deploy.yml` استک برنامه را به‌روزرسانی می‌کند و رول `watchtower` را نیز اجرا می‌کند تا تایمر/کانفیگ عامل خودکار همیشه همگام بماند. `application` پیش از roll-out، Migration را با همان ایمیج اجرا می‌کند و سپس ۳ رپلیکای فرانت‌اند و ۴ رپلیکای بک‌اند را با rolling update (ترتیب `start-first`) مستقر می‌کند.
 - رول `application` پس از استقرار، converge شدن تعداد رپلیکاها و سلامت بک‌اند را از داخل شبکه داخلی بررسی می‌کند.
 - `rollback.yml` تگ هدف را از اپراتور می‌گیرد و همان رول را با ایمیج قدیمی اجرا می‌کند؛ در صورت شکست healthcheck، عملیات ناموفق گزارش می‌شود.
-- `teardown.yml` استک‌ها را حذف می‌کند اما داده‌ها، شبکه‌ها و Swarm را دست‌نخورده نگه می‌دارد تا revert امن باشد.
+- `teardown.yml` ابتدا پرچم توقف را می‌سازد، تایمر و سرویس عامل خودکار را متوقف می‌کند، با `flock` استک را حذف می‌کند و در پایان پرچم را پاک می‌کند؛ داده‌ها، شبکه‌ها و Swarm دست‌نخورده می‌مانند تا revert امن باشد.
 - کلیدهای حساس از Ansible Vault یا `-e` تأمین می‌شوند؛ در صورت نبود، رول با پیام واضح متوقف می‌شود.
+
+---
+
+### ۲.۸. عامل به‌روزرسانی خودکار سازگار با Swarm (رول `watchtower`)
+
+Watchtower اصلی فقط کانتینرهای مستقل را مدیریت می‌کند و اگر روی کانتینرهای task در Swarm اجرا شود، taskها را خارج از سرویس بازسازی می‌کند و reconciler سوئرم آن‌ها را حذف می‌کند. بنابراین رول `watchtower` یک عامل کوچک Swarm-native نصب می‌کند که همان قرارداد را دارد:
+
+| فایل | نقش |
+| :--- | :--- |
+| `ansible/roles/watchtower/defaults/main.yml` | `auto_update_enabled: true`، `auto_update_interval: 5min`، `auto_update_tag: latest` |
+| `ansible/roles/watchtower/files/watchtower.sh` | منطق اصلی: pull، مقایسه دیجست، Migration، `docker service update` و rollback |
+| `ansible/roles/watchtower/templates/watchtower.env.j2` | نام سرویس‌ها، تگ کانال، مسیر `.env`، قفل و لاگ |
+| `ansible/roles/watchtower/templates/watchtower.service.j2` | یونیت `Type=oneshot` با `TimeoutStartSec=45min` |
+| `ansible/roles/watchtower/templates/watchtower.timer.j2` | اجرای دوره‌ای با `OnUnitActiveSec={{ auto_update_interval }}` |
+
+رفتار عامل:
+
+1. پرچم `/srv/<project>/.deploy-in-progress` را بررسی می‌کند؛ اگر کمتر از ۳۰ دقیقه قدمت داشته باشد، چرخه را رد می‌کند.
+2. با `flock -n` قفل `/srv/<project>/.deploy.lock` را می‌گیرد؛ در صورت اشغال توسط Ansible، چرخه را رد می‌کند.
+3. تگ تصویر سرویس را از `docker service inspect` می‌خواند؛ اگر برابر `auto_update_tag` نباشد (مثلاً pin شده به `<short-sha>`)، آن سرویس را رها می‌کند.
+4. تصویر را `docker pull` می‌کند و دیجست `RepoDigests` همان مخزن را با دیجست سرویس مقایسه می‌کند.
+5. در صورت تفاوت، برای بک‌اند ابتدا `node src/config/run-migrations.js` را با ایمیج جدید اجرا می‌کند؛ شکست Migration کل چرخه را متوقف می‌کند.
+6. `docker service update --with-registry-auth --image <repo>:<tag>@sha256:<digest>` را اجرا می‌کند؛ pin کردن دیجست مانع جابه‌جایی تگ میان pull و update می‌شود. Swarm خود rolling update را طبق `update_config` انجام می‌دهد.
+7. فقط پس از موفقیت بک‌اند، فرانت‌اند را به‌روزرسانی می‌کند؛ در شکست update، `docker service update --rollback` را صدا می‌زند.
+
+**قرارداد عدم تداخل با Ansible:**
+- در رول `application`، پرچم `.deploy-in-progress` در ابتدا ساخته و در پایان حذف می‌شود تا فاصله بین دو قفل‌گیری جداگانه (Migration و `docker stack deploy`) بسته شود.
+- هر دو دستور Migration و `docker stack deploy` در Ansible با `flock -w 900 /srv/<project>/.deploy.lock` اجرا می‌شوند.
+- چون هر دو طرف قبل از تغییر، دیجست/تگ فعلی سرویس را مقایسه می‌کنند، برای یک انتشار فقط یک rolling update رخ می‌دهد: اگر Ansible اول اجرا شود، عامل خودکار دیجست یکسان می‌بیند؛ اگر عامل خودکار اول اجرا شود، `docker stack deploy` بعدی همان دیجست را resolve می‌کند.
+- استقرار با تگ immutable (Rollback) سرویس را از کانال `latest` خارج می‌کند؛ برای بازگشت به به‌روزرسانی خودکار باید دوباره با `image_tag=latest` مستقر شود.
 
 ---
 
@@ -201,3 +231,7 @@ all:
 - [ ] رول `docker` به‌صورت idempotent سوئرم را راه‌اندازی کرده و شبکه‌های overlay را بسازد.
 - [ ] استقرار، Migration، بررسی سلامت و تعداد رپلیکاها (۳ فرانت / ۴ بک‌اند) کاملاً از طریق Ansible انجام شود.
 - [ ] پلی‌بوک `rollback.yml` امکان دریافت تگ قبلی و پلی‌بوک `teardown.yml` امکان حذف امن استک‌ها را فراهم کند.
+- [ ] رول `watchtower` روی نود manager نصب شده و تایمر آن در اولین اجرای `site.yml` فعال شود.
+- [ ] هر دو مسیر Ansible و عامل خودکار از قفل مشترک `.deploy.lock` و پرچم `.deploy-in-progress` استفاده کنند.
+- [ ] عامل خودکار فقط تگ `auto_update_tag` را دنبال کند و سرویس‌های pin‌شده به `<short-sha>` را تغییر ندهد.
+- [ ] اجرای دوباره `site.yml`/`deploy.yml` باعث rolling update تکراری برای یک انتشار نشود.

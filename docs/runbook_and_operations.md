@@ -44,7 +44,53 @@ ansible-playbook -i inventory/production/hosts.yml playbooks/deploy.yml \
 ---
 
 ### ۱.۳. فرآیند اعمال مایگریشن بدون اختلال (Zero-Downtime Migration)
-مایگریشن به‌صورت خودکار توسط رول `application` و پیش از roll-out نسخه جدید، با همان ایمیج بک‌اند و روی شبکه داخلی Swarm اجرا می‌شود. اجرای دستی لازم نیست:
+مایگریشن به‌صورت خودکار توسط رول `application` و پیش از roll-out نسخه جدید، با همان ایمیج بک‌اند و روی شبکه داخلی Swarm اجرا می‌شود. اجرای دستی لازم نیست. عامل به‌روزرسانی خودکار نیز پیش از هر به‌روزرسانی بک‌اند، همین مایگریشن‌ها را با ایمیج جدید اجرا می‌کند و در صورت شکست، به‌روزرسانی را متوقف می‌کند.
+
+---
+
+### ۱.۴. به‌روزرسانی خودکار تصاویر GHCR (Auto-Update)
+
+رول `watchtower` روی اولین سرور (نود manager) یک سرویس و تایمر systemd نصب می‌کند. این عامل هر ۵ دقیقه تگ `latest` را از GHCR می‌کشد، دیجست آن را با دیجست سرویس مقایسه می‌کند و در صورت تغییر، ابتدا مایگریشن بک‌اند و سپس `docker service update` را اجرا می‌کند. Swarm طبق `update_config`، به‌روزرسانی را با `start-first` و `parallelism: 1` انجام می‌دهد.
+
+```bash
+# وضعیت تایمر و سرویس
+systemctl status liquid-portal-watchtower.timer
+systemctl status liquid-portal-watchtower.service
+
+# مشاهده لاگ کامل تصمیم‌ها و خروجی pull/update
+tail -f /srv/liquid-portal/auto-update.log
+
+# اجرای دستی یک چرخه (بدون انتظار برای تایمر)
+sudo systemctl start liquid-portal-watchtower.service
+
+# توقف و فعال‌سازی مجدد
+sudo systemctl stop liquid-portal-watchtower.timer
+sudo systemctl start liquid-portal-watchtower.timer
+```
+
+| متغیر Ansible          | پیش‌فرض | توضیح                                                                 |
+| :--------------------- | :------ | :-------------------------------------------------------------------- |
+| `auto_update_enabled`  | `true`  | فعال یا غیرفعال کردن تایمر به‌روزرسانی خودکار                          |
+| `auto_update_interval` | `5min`  | بازه بررسی GHCR؛ هر مقدار معتبر برای `OnUnitActiveSec` در systemd     |
+| `auto_update_tag`      | `latest`| تگ متحرک مورد دنبال‌شده؛ سرویس‌های pin‌شده به SHA نادیده گرفته می‌شوند   |
+
+---
+
+### ۱.۵. جلوگیری از تداخل Ansible و به‌روزرسانی خودکار
+
+| مکانیزم | مسیر | رفتار |
+| :------ | :--- | :---- |
+| قفل مشترک | `/srv/liquid-portal/.deploy.lock` | Ansible با `flock -w 900` منتظر می‌ماند؛ عامل خودکار با `flock -n` در صورت اشغال، چرخه را رد می‌کند. |
+| پرچم توقف | `/srv/liquid-portal/.deploy-in-progress` | در ابتدای رول `application` ساخته و در پایان حذف می‌شود؛ فاصله بین دو قفل‌گیری Ansible را می‌بندد. پرچم قدیمی‌تر از ۳۰ دقیقه نادیده گرفته می‌شود. |
+| مقایسه دیجست | `docker service inspect` در برابر `docker pull` | اگر Ansible همان نسخه را مستقر کرده باشد، عامل خودکار تغییری اعمال نمی‌کند. |
+| تگ immutable | `auto_update_tag` | پس از Rollback یا استقرار با `<short-sha>`، عامل خودکار آن سرویس را جلو نمی‌برد. |
+
+پس از یک Rollback دستی، برای بازگشت به کانال به‌روزرسانی خودکار کافی است استقرار را دوباره روی `latest` اجرا کنید:
+
+```bash
+cd ansible
+ansible-playbook -i inventory/production/hosts.yml playbooks/deploy.yml -e "image_tag=latest"
+```
 
 ---
 

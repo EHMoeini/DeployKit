@@ -1,0 +1,13 @@
+[Unit]
+Description=Swarm auto-updater for {{ project_name }} (GHCR rolling updates)
+Documentation=https://github.com/{{ ghcr_owner }}/{{ ghcr_repo }}
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/srv/{{ project_name }}/watchtower.env
+ExecStart=/srv/{{ project_name }}/scripts/watchtower.sh
+Nice=10
+TimeoutStartSec=45min

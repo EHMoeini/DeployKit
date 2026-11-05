@@ -38,7 +38,46 @@ ansible-playbook -i inventory/production/hosts.yml playbooks/deploy.yml \
 ---
 
 ### ۱.۳. فرآیند اعمال Migration بدون اختلال در سرویس (Zero-Downtime Migration)
-Migration به‌صورت خودکار توسط رول `application` و پیش از roll-out نسخه جدید اجرا می‌شود. اجرای دستی لازم نیست.
+Migration به‌صورت خودکار توسط رول `application` و پیش از roll-out نسخه جدید اجرا می‌شود. عامل به‌روزرسانی خودکار نیز پیش از هر به‌روزرسانی بک‌اند، Migrationها را با ایمیج جدید اجرا می‌کند و در صورت شکست، کل چرخه را متوقف می‌کند. اجرای دستی لازم نیست.
+
+---
+
+### ۱.۴. به‌روزرسانی خودکار تصاویر (Auto-Update Runbook)
+
+پس از هر push به `main`، GitHub Actions تگ `latest` را در GHCR به‌روزرسانی می‌کند. رول `watchtower` روی نود manager هر ۵ دقیقه یک چرخه اجرا می‌کند: pull تصویر `latest`، مقایسه دیجست با سرویس، اجرای Migration بک‌اند و سپس `docker service update`. Swarm طبق `update_config` استک، rolling update را با `start-first` و `parallelism: 1` انجام می‌دهد.
+
+```bash
+# وضعیت عامل خودکار
+systemctl status liquid-portal-watchtower.timer
+systemctl status liquid-portal-watchtower.service
+
+# لاگ تصمیم‌ها و خروجی pull/update/migration
+tail -f /srv/liquid-portal/auto-update.log
+
+# اجرای دستی یک چرخه
+sudo systemctl start liquid-portal-watchtower.service
+
+# توقف موقت / فعال‌سازی
+sudo systemctl stop liquid-portal-watchtower.timer
+sudo systemctl start liquid-portal-watchtower.timer
+
+# غیرفعال‌سازی پایدار از طریق Ansible
+cd ansible
+ansible-playbook -i inventory/production/hosts.yml playbooks/deploy.yml \
+  -e "image_tag=latest auto_update_enabled=false"
+```
+
+| متغیر Ansible          | پیش‌فرض | توضیح                                                             |
+| :--------------------- | :------ | :---------------------------------------------------------------- |
+| `auto_update_enabled`  | `true`  | فعال یا غیرفعال کردن تایمر به‌روزرسانی خودکار                      |
+| `auto_update_interval` | `5min`  | بازه بررسی GHCR (مقدار معتبر `OnUnitActiveSec` در systemd)        |
+| `auto_update_tag`      | `latest`| تگ متحرک مورد دنبال‌شده؛ سرویس pin‌شده به SHA نادیده گرفته می‌شود   |
+
+**عدم تداخل با Ansible:**
+- قفل مشترک `/srv/<project>/.deploy.lock`: Ansible با `flock -w 900` و عامل خودکار با `flock -n`.
+- پرچم `/srv/<project>/.deploy-in-progress`: در ابتدای رول `application` ساخته و در پایان حذف می‌شود؛ پرچم قدیمی‌تر از ۳۰ دقیقه نادیده گرفته می‌شود.
+- چون هر دو طرف دیجست/تگ فعلی را مقایسه می‌کنند، برای هر انتشار فقط یک rolling update رخ می‌دهد.
+- استقرار با `<short-sha>` سرویس را از کانال خودکار خارج می‌کند؛ برای بازگشت، دوباره با `image_tag=latest` مستقر کنید.
 
 ---
 
@@ -151,3 +190,6 @@ $$\sum (R \times P) + W \le \text{max\_connections} - \text{superuser\_reserved}
 - [ ] سازوکار پشتیبان‌گیری اتمیک با قفل `flock` و نگهداری 7/4/6 و اعتبارسنجی SHA-256 پیاده‌سازی شده باشد.
 - [ ] استقرار با Ansible از سیاست‌های ضد قفل شدن SSH و ممیزی فقط‌خواندنی دیسک تبعیت نماید.
 - [ ] آزمون‌های پذیرش A تا G در اسکریپت آزمون خودکار به صورت کامل موفق گزارش شوند.
+- [ ] عامل به‌روزرسانی خودکار از اولین `site.yml` نصب و فعال شود و مسیر لاگ/کنترل آن مستند شده باشد.
+- [ ] قفل مشترک و پرچم توقف، تداخل Ansible و به‌روزرسانی خودکار را در عمل مسدود کنند.
+- [ ] رفتار Rollback با تگ `<short-sha>` و بازگشت به کانال `latest` در Runbook مستند شده باشد.

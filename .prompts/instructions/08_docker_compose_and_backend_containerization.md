@@ -190,7 +190,9 @@ networks:
 
 - سرویس فرانت‌اند با ۳ رپلیکا و سرویس بک‌اند با ۴ رپلیکا؛ PostgreSQL تک‌نسخه و pinned به نود manager.
 - استفاده از `deploy.replicas`، `deploy.update_config` با ترتیب `start-first`، `deploy.restart_policy` و `deploy.labels`.
-- حذف `container_name`، `depends_on` و `restart`؛ سرویس یک‌بارمصرف `migrate` در استک وجود ندارد و Migration توسط Ansible اجرا می‌شود.
+- `update_config` باید `parallelism: 1`، `order: start-first`، `failure_action: rollback` و `monitor` داشته باشد تا هم استقرار اولیه Ansible و هم به‌روزرسانی خودکار عامل `watchtower` به‌صورت rolling و بدون قطعی انجام شود.
+- `rollback_config` نیز با همان ترتیب `start-first` تعریف شود تا بازگشت خودکار Swarm در صورت شکست healthcheck امن باشد.
+- حذف `container_name`، `depends_on` و `restart`؛ سرویس یک‌بارمصرف `migrate` در استک وجود ندارد و Migration توسط Ansible (و عامل خودکار پیش از به‌روزرسانی بک‌اند) اجرا می‌شود.
 - اتصال به دو شبکه overlay خارجی (`app-internal` و `traefik-public`) که Ansible می‌سازد.
 - لیبل‌های Traefik زیر `deploy.labels` و سازگار با swarm provider.
 - Healthcheck برای هر سه سرویس و اتصال بک‌اند به دیتابیس از طریق نام سرویس استک.
@@ -214,3 +216,4 @@ networks:
 - [ ] Migration توسط Ansible و با ایمیج بک‌اند قبل از roll-out نسخه جدید اجرا شود.
 - [ ] مقیاس‌پذیری با `--scale backend=3` تست شده و ترافیک توسط Traefik توزیع شود.
 - [ ] فایل `docker-compose.yml` یک استک معتبر Docker Swarm با ۳ رپلیکای فرانت و ۴ رپلیکای بک‌اند، بدون `build:`، `container_name` و `depends_on` باشد.
+- [ ] `update_config` و `rollback_config` هر دو rolling و `start-first` باشند تا استقرار اولیه و به‌روزرسانی خودکار بدون قطعی انجام شوند.

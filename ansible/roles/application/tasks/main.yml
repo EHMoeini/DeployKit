@@ -25,6 +25,14 @@
     - "/srv/{{ project_name }}/backups/postgres/daily"
     - "/srv/{{ project_name }}/backups/postgres/monthly"
 
+- name: Mark an Ansible deployment as in progress
+  ansible.builtin.file:
+    path: "/srv/{{ project_name }}/.deploy-in-progress"
+    state: touch
+    owner: root
+    group: root
+    mode: "0600"
+
 # The backend image runs as the node user (UID 1000); the bind mount must be
 # writable by that UID so uploads survive container replacement.
 - name: Create uploads directory for the backend runtime user
@@ -43,6 +51,16 @@
     owner: "70"
     group: "70"
     mode: "0700"
+
+- name: Ensure the shared deployment lock file exists
+  ansible.builtin.file:
+    path: "/srv/{{ project_name }}/.deploy.lock"
+    state: touch
+    owner: root
+    group: root
+    mode: "0600"
+    modification_time: preserve
+    access_time: preserve
 
 - name: Render deployment environment file
   ansible.builtin.template:
@@ -121,6 +139,10 @@
 - name: Bootstrap the stack with application replicas disabled
   ansible.builtin.command:
     argv:
+      - flock
+      - -w
+      - "900"
+      - "/srv/{{ project_name }}/.deploy.lock"
       - docker
       - stack
       - deploy
@@ -159,6 +181,10 @@
 - name: Run database migrations with the release image
   ansible.builtin.command:
     argv:
+      - flock
+      - -w
+      - "900"
+      - "/srv/{{ project_name }}/.deploy.lock"
       - docker
       - run
       - --rm
@@ -175,6 +201,10 @@
 - name: Deploy the application stack
   ansible.builtin.command:
     argv:
+      - flock
+      - -w
+      - "900"
+      - "/srv/{{ project_name }}/.deploy.lock"
       - docker
       - stack
       - deploy
@@ -238,3 +268,8 @@
     line: "[{{ ansible_date_time.iso8601 }}] DEPLOY tag: {{ app_image_tag }} by {{ lookup('env', 'USER') }}"
     create: true
     mode: "0640"
+
+- name: Allow the auto-updater to resume
+  ansible.builtin.file:
+    path: "/srv/{{ project_name }}/.deploy-in-progress"
+    state: absent

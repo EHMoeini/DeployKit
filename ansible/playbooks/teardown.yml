@@ -5,9 +5,36 @@
   hosts: servers
   become: true
   tasks:
+    # Close the race with an in-flight auto-update cycle: the flag blocks new
+    # cycles and flock waits for the cycle that may already hold the lock.
+    - name: Pause auto-updates before removing the stack
+      ansible.builtin.file:
+        path: "/srv/{{ project_name }}/.deploy-in-progress"
+        state: touch
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Stop and disable the auto-updater timer
+      ansible.builtin.systemd:
+        name: "{{ project_name }}-watchtower.timer"
+        state: stopped
+        enabled: false
+      failed_when: false
+
+    - name: Stop a running auto-updater service
+      ansible.builtin.systemd:
+        name: "{{ project_name }}-watchtower.service"
+        state: stopped
+      failed_when: false
+
     - name: Remove application stack
       ansible.builtin.command:
         argv:
+          - flock
+          - -w
+          - "900"
+          - "/srv/{{ project_name }}/.deploy.lock"
           - docker
           - stack
           - rm
@@ -56,3 +83,8 @@
       delay: 5
       changed_when: false
       when: remove_traefik | default(false) | bool
+
+    - name: Clear the deployment pause flag
+      ansible.builtin.file:
+        path: "/srv/{{ project_name }}/.deploy-in-progress"
+        state: absent
