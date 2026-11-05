@@ -1,0 +1,6 @@
+# Files consumed by Linux hosts must keep LF endings even when checked out on
+# Windows (core.autocrlf=true would otherwise break shell shebangs and unit files).
+*.sh      text eol=lf
+*.j2      text eol=lf
+*.yml     text eol=lf
+*.yaml    text eol=lf
