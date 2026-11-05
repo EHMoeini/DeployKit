@@ -34,11 +34,11 @@ app.use((req, res, next) => {
 });
 
 // Health Check Endpoints
-app.get('/health/live', (req, res) => {
+app.get(['/health/live', '/api/v1/health/live', '/api/health/live', '/api/v1/health', '/api/health'], (req, res) => {
     res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-app.get('/health/ready', async (req, res) => {
+app.get(['/health/ready', '/api/v1/health/ready', '/api/health/ready'], async (req, res) => {
     try {
         const dbStatus = await checkDatabaseHealth();
         if (dbStatus.healthy) {

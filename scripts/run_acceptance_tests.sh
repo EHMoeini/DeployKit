@@ -21,6 +21,43 @@ test_fail() {
   exit 1
 }
 
+# استخراج مقادیر JSON با اولویت jq و جایگزین node/python3
+json_extract() {
+  local json_payload="$1"
+  local field_path="$2"
+  if command -v jq >/dev/null 2>&1; then
+    echo "${json_payload}" | jq -r "${field_path} // empty"
+  elif command -v python3 >/dev/null 2>&1; then
+    python3 -c "
+import sys, json
+try:
+    data = json.loads(sys.argv[1])
+    parts = sys.argv[2].strip('. ').split('.')
+    v = data
+    for p in parts:
+        if isinstance(v, dict):
+            v = v.get(p)
+        else:
+            v = None
+            break
+    if v is not None:
+        print(v)
+except Exception:
+    pass
+" "${json_payload}" "${field_path}"
+  else
+    node -e "
+try {
+  const data = JSON.parse(process.argv[1]);
+  const parts = process.argv[2].replace(/^\./, '').split('.');
+  let v = data;
+  for (const p of parts) { if (v) v = v[p]; }
+  if (v !== undefined && v !== null) console.log(v);
+} catch (e) {}
+" "${json_payload}" "${field_path}"
+  fi
+}
+
 # -----------------------------------------------------------------------------
 # Test E: بررسی رفتار سرور استاتیک و تمایز 404 در برابر SPA Fallback
 # -----------------------------------------------------------------------------
@@ -53,8 +90,8 @@ REGISTER_RES=$(curl -s -c /tmp/cookies.txt -X POST "${API_URL}/auth/register" \
   -H "Content-Type: application/json" \
   -d "{\"email\":\"${TEST_USER}\",\"password\":\"${TEST_PASS}\"}")
 
-ACCESS_TOKEN=$(echo "${REGISTER_RES}" | jq -r '.accessToken // empty')
-CSRF_TOKEN=$(echo "${REGISTER_RES}" | jq -r '.csrfToken // empty')
+ACCESS_TOKEN=$(json_extract "${REGISTER_RES}" "accessToken")
+CSRF_TOKEN=$(json_extract "${REGISTER_RES}" "csrfToken")
 
 if [[ -n "${ACCESS_TOKEN}" && -n "${CSRF_TOKEN}" ]]; then
   test_pass "ثبت‌نام کاربر با موفقیت انجام شد و توکن‌ها دریافت شدند."
@@ -69,7 +106,7 @@ echo -e "\n--- [Test A] ارزیابی رفتار بدون وضعیت در مق�
 for i in {1..5}; do
   PROFILE_RES=$(curl -s -b /tmp/cookies.txt -X GET "${API_URL}/user/me" \
     -H "Authorization: Bearer ${ACCESS_TOKEN}")
-  EMAIL=$(echo "${PROFILE_RES}" | jq -r '.user.email // empty')
+  EMAIL=$(json_extract "${PROFILE_RES}" "user.email")
   if [[ "${EMAIL}" == "${TEST_USER}" ]]; then
     echo "درخواست $i با موفقیت توسط کلاستر پاسخ داده شد."
   else
@@ -85,10 +122,10 @@ echo -e "\n--- [Test D] ارزیابی سناریوهای لبه و چرخش ر�
 
 # 1. تست درخواست هم‌زمان تجدید توکن (Grace Period)
 REFRESH_1=$(curl -s -b /tmp/cookies.txt -X POST "${API_URL}/auth/refresh" -H "X-CSRF-Token: ${CSRF_TOKEN}")
-TOKEN_1=$(echo "${REFRESH_1}" | jq -r '.accessToken // empty')
+TOKEN_1=$(json_extract "${REFRESH_1}" "accessToken")
 
 REFRESH_CONCURRENT=$(curl -s -b /tmp/cookies.txt -X POST "${API_URL}/auth/refresh" -H "X-CSRF-Token: ${CSRF_TOKEN}")
-TOKEN_CONCURRENT=$(echo "${REFRESH_CONCURRENT}" | jq -r '.accessToken // empty')
+TOKEN_CONCURRENT=$(json_extract "${REFRESH_CONCURRENT}" "accessToken")
 
 if [[ -n "${TOKEN_1}" && -n "${TOKEN_CONCURRENT}" ]]; then
   test_pass "درخواست‌های هم‌زمان درون بازه ۱۰ ثانیه‌ای بدون خطا توکن معتبر تحویل گرفتند."
@@ -119,11 +156,28 @@ test_pass "زنجیره سشن کاربر بر اساس سیاست ابطال خ
 # Test F: ارزیابی ساختار پشتیبان‌گیری و سلامت دیتابیس
 # -----------------------------------------------------------------------------
 echo -e "\n--- [Test F] ارزیابی صحت اسکریپت پشتیبان‌گیری ---"
+BACKUP_SCRIPT=""
 if [[ -f "./scripts/backup_postgres.sh" ]]; then
-  bash ./scripts/backup_postgres.sh
-  test_pass "اسکریپت پشتیبان‌گیری بدون خطا اجرا گردید و لاگ و فایل هش ثبت شد."
+  BACKUP_SCRIPT="./scripts/backup_postgres.sh"
 elif [[ -f "../scripts/backup_postgres.sh" ]]; then
-  bash ../scripts/backup_postgres.sh
+  BACKUP_SCRIPT="../scripts/backup_postgres.sh"
+fi
+
+if [[ -n "${BACKUP_SCRIPT}" ]]; then
+  # تطبیق نام کانتینر و مسیر فایل‌ها بر اساس محیط اجرای فعلی
+  PG_CONTAINER="liquid-portal_postgres"
+  if docker ps --format '{{.Names}}' | grep -q "^local_postgres$"; then
+    PG_CONTAINER="local_postgres"
+  fi
+
+  if [[ -w "/srv" ]]; then
+    CONTAINER_NAME="${PG_CONTAINER}" bash "${BACKUP_SCRIPT}"
+  else
+    BACKUP_ROOT="/tmp/liquid-portal/backups/postgres" \
+    LOCK_FILE="/tmp/postgres_backup_liquid-portal.lock" \
+    CONTAINER_NAME="${PG_CONTAINER}" \
+    bash "${BACKUP_SCRIPT}"
+  fi
   test_pass "اسکریپت پشتیبان‌گیری بدون خطا اجرا گردید و لاگ و فایل هش ثبت شد."
 else
   echo "اسکریپت پشتیبان‌گیری در مسیر سرور تست محلی غایب است (در محیط هاست اجرا گردد)."

@@ -2,12 +2,12 @@
 set -Eeuo pipefail
 
 PROJECT_NAME="${PROJECT_NAME:-liquid-portal}"
-CONTAINER_NAME="${PROJECT_NAME}_postgres"
+CONTAINER_NAME="${CONTAINER_NAME:-${PROJECT_NAME}_postgres}"
 DB_NAME="${DB_NAME:-portal_db}"
 DB_USER="${DB_USER:-portal_user}"
-BACKUP_ROOT="/srv/${PROJECT_NAME}/backups/postgres"
-LOG_FILE="${BACKUP_ROOT}/logs/backup.log"
-LOCK_FILE="/var/lock/postgres_backup_${PROJECT_NAME}.lock"
+BACKUP_ROOT="${BACKUP_ROOT:-/srv/${PROJECT_NAME}/backups/postgres}"
+LOG_FILE="${LOG_FILE:-${BACKUP_ROOT}/logs/backup.log}"
+LOCK_FILE="${LOCK_FILE:-/var/lock/postgres_backup_${PROJECT_NAME}.lock}"
 
 mkdir -p "${BACKUP_ROOT}/"{daily,weekly,monthly,logs}
 

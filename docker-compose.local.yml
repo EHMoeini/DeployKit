@@ -3,9 +3,10 @@ version: '3.8'
 services:
   # سرویس Traefik محلی
   traefik:
-    image: traefik:v3.0
+    image: traefik:v3
     container_name: local_traefik
     command:
+      - "--log.level=DEBUG"
       - "--api.insecure=true"
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
