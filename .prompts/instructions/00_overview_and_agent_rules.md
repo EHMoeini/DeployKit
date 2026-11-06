@@ -25,14 +25,14 @@
 5. **ممنوعیت Sticky Session:**
    - سرویس Backend باید ذاتاً و کاملاً Stateless باشد. درخواست‌های متوالی یک کاربر ممکن است توسط Replicaهای مختلف Backend پاسخ داده شوند بدون اینکه خطایی رخ دهد.
 6. **تفکیک قطعی ساخت (Build) از استقرار (Deploy):**
-   - سرور Production هرگز کد منبع را کامپایل یا Build نمی‌کند. ایمیج‌ها در GitHub Actions ساخته شده، در GHCR ثبت می‌شوند و روی سرور صرفاً Pull می‌گردند.
+   - سرور Production هرگز کد منبع را کامپایل یا Build نمی‌کند. ایمیج‌ها در GitHub Actions، Docker Hub یا هر Container Registry دیگر ساخته شده و روی سرور صرفاً Pull می‌گردند (پشتیبانی مستقیم از متغیرهای `backend_image` و `frontend_image` یا الگوی GHCR).
 7. **ممنوعیت درج Secretها در کد و Git:**
-   - هیچ رمز عبور، کلید خصوصی، توکن یا کانفیگ حساسی نباید در سورس‌کد، Dockerfile یا مخزن Git ثبت شود. متغیرها باید از `.env`، Secretهای GitHub Actions و Ansible Vault تغذیه شوند.
+   - هیچ رمز عبور، کلید خصوصی، توکن یا کانفیگ حساسی نباید در سورس‌کد، Dockerfile یا مخزن Git ثبت شود. متغیرها از طریق فایل Inventory (`ansible/inventory/production/hosts.yml`)، تولید خودکار و امن Ansible (`lookup('password')`) یا Ansible Vault خارج از گیت تأمین می‌شوند تا استقرار برای کاربر بدون پیچیدگی و امن باشد.
 8. **دروازه تأیید انسانی (Human Approval Gates):**
    - برای اقدامات پرریسک (مانند اعمال تغییرات دیسک در `storage-apply.yml`، تغییر قوانین SSH فایروال، اجرای Migrationهای مخرب یا بازنویسی دیتابیس در Disaster Recovery) Agent باید طرح و خطرات را به کاربر نمایش داده و تأیید صریح دریافت کند.
-9. **تغییرات فقط از طریق Ansible:**
-   - هیچ دستور تغییری مستقیماً روی سرور اجرا نمی‌شود. راه‌اندازی Swarm، ساخت شبکه‌ها، استقرار استک‌ها، Migration، Rollback و Teardown همگی باید از پلی‌بوک‌های Ansible انجام شوند و قابل بازگشت باشند.
-   - **استثنای کنترل‌شده:** رول `watchtower` یک عامل به‌روزرسانی خودکار را از طریق Ansible نصب و مدیریت می‌کند تا تصاویر جدید GHCR را با rolling update اعمال کند. این عامل فقط از طریق قفل مشترک و پرچم توقف با Ansible هماهنگ می‌شود، همیشه با Ansible قابل غیرفعال‌سازی/حذف است و هیچ تغییر دستی روی سرور محسوب نمی‌شود.
+9. **تغییرات فقط از طریق Ansible با رویکرد استقرار تک‌دستوری (Turn-key Zero-Touch Deployment):**
+   - هیچ دستور تغییری نباید دستی روی سرور اجرا شود. کل فرآیند از آماده‌سازی سرور خام (نصب خودکار پایتون ۳)، نصب داکر، راه‌اندازی Swarm، ساخت شبکه‌ها، SSL خودکار، استقرار استک‌ها، Migration، Rollback و Teardown همگی باید تنها با اجرای یک پلی‌بوک جامع (`ansible-playbook -i inventory/production/hosts.yml playbooks/site.yml` یا اسکریپت `./deploy.sh`) قابل پیاده‌سازی باشد، به گونه‌ای که هر کاربری صرفاً با تغییر آی‌پی سرور در Inventory بتواند استقرار را به سرانجام برساند.
+   - **استثنای کنترل‌شده:** رول `watchtower` یک عامل به‌روزرسانی خودکار را از طریق Ansible نصب و مدیریت می‌کند تا تصاویر جدید را با rolling update اعمال کند. این عامل فقط از طریق قفل مشترک و پرچم توقف با Ansible هماهنگ می‌شود، همیشه با Ansible قابل غیرفعال‌سازی/حذف است و هیچ تغییر دستی روی سرور محسوب نمی‌شود.
 
 ---
 
@@ -73,13 +73,15 @@ project-root/
 ├── ansible/                        # چارچوب جامع مدیریت زیرساخت و استقرار
 │   ├── ansible.cfg
 │   ├── requirements.yml
+│   ├── deploy.sh                   # اسکریپت اجرای تک‌دستوری دپلوی در پوشه انسیبل
 │   ├── inventory/
 │   │   ├── development/
 │   │   ├── staging/
-│   │   └── production/
+│   │   └── production/             # شامل hosts.yml دو زبانه و ساده‌سازی‌شده
 │   ├── playbooks/
 │   ├── roles/
 │   └── vault/
+├── deploy.sh                       # اسکریپت اصلی اجرای تک‌دستوری در ریشه پروژه
 ├── docker-compose.yml              # استک Docker Swarm برای Production/Staging (۳ فرانت / ۴ بک‌اند)
 ├── docker-compose.local.yml        # فایل اجرای محلی و تست مقیاس‌پذیری (شامل ساخت محلی و Traefik محلی)
 ├── .env.example                    # الگوی متغیرهای محیطی
@@ -93,22 +95,22 @@ project-root/
 
 عامل هوش مصنوعی (AI Agent) باید مراحل را به ترتیب زیر مطالعه، پیاده‌سازی و اعتبارسنجی کند:
 
-| شماره  | نام فایل دستورالعمل                                 | هدف و حوزه پیاده‌سازی                                                         |
-| :----- | :-------------------------------------------------- | :--------------------------------------------------------------------------- |
-| **01** | `01_repository_scaffolding.md`                      | ایجاد ساختار دایرکتوری‌ها، کانفیگ‌های پایه و پکیج‌ها                            |
-| **02** | `02_database_schema_and_migrations.md`              | طراحی دیتابیس PostgreSQL، ایندکس‌ها، کانکشن پول و رانر مستقل Migration        |
-| **03** | `03_backend_stateless_api_and_auth.md`              | پیاده‌سازی هسته بک‌اند، JWT + Refresh Token چرخشی، Grace Period و CSRF         |
-| **04** | `04_backend_file_storage_and_job_queue.md`          | انتزاع ذخیره‌سازی فایل مشترک و صف کارهای پس‌زمینه بدون Redis                   |
-| **05** | `05_frontend_spa_routing_and_runtime_config.md`     | راه‌اندازی SPA Router، کانفیگ زمان اجرا (`/config.js`) و Interceptor توکن     |
-| **06** | `06_frontend_components_and_views_structure.md`     | معماری ساختاری ویوها، چرخه حیات کامپوننت‌ها و چیدمان کلاینت SPA               |
-| **07** | `07_frontend_static_server_and_dockerfile.md`       | ساخت سرور استاتیک بدون Nginx با تفکیک 404 واقعی و داکرفایل فرانت‌اند          |
-| **08** | `08_docker_compose_and_backend_containerization.md` | داکرفایل بک‌اند، استک Docker Swarm تولید و کامپوز محلی                      |
-| **09** | `09_traefik_reverse_proxy_and_ssl.md`               | پیکربندی مسیریابی Traefik روی Swarm، لود بالانسینگ و SSL لتس‌انکریپت          |
-| **10** | `10_database_backup_and_disaster_recovery.md`       | اسکریپت‌های بکاپ اتمیک با flock، تست بازیابی دوره‌ای و سناریوهای بازگردانی     |
-| **11** | `11_ci_cd_github_actions_pipeline.md`               | پایپ‌لاین اتوماتیک ساخت و انتشار ایمیج‌ها در GHCR با تگ‌های معتبر               |
-| **12** | `12_ansible_infrastructure_and_playbooks.md`        | چارچوب کامل Ansible، رول‌های امنیتی، Swarm، استقرار، رول‌بک و Teardown        |
-| **13** | `13_verification_and_acceptance_tests.md`           | اجرای آزمون‌های پذیرش جامع A تا G و ارزیابی نهایی سیستم                       |
-| **14** | `14_final_documentation_and_operations.md`          | تولید مستندات عملیاتی، راهنمای ریکاوری، دیکشنری متغیرها و تحویل نهایی        |
+| شماره  | نام فایل دستورالعمل                                 | هدف و حوزه پیاده‌سازی                                                                                                                  |
+| :----- | :-------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------ |
+| **01** | `01_repository_scaffolding.md`                      | ایجاد ساختار دایرکتوری‌ها، کانفیگ‌های پایه و پکیج‌ها                                                                                     |
+| **02** | `02_database_schema_and_migrations.md`              | طراحی دیتابیس PostgreSQL، ایندکس‌ها، کانکشن پول و رانر مستقل Migration                                                                 |
+| **03** | `03_backend_stateless_api_and_auth.md`              | پیاده‌سازی هسته بک‌اند، JWT + Refresh Token چرخشی، Grace Period و CSRF                                                                  |
+| **04** | `04_backend_file_storage_and_job_queue.md`          | انتزاع ذخیره‌سازی فایل مشترک و صف کارهای پس‌زمینه بدون Redis                                                                            |
+| **05** | `05_frontend_spa_routing_and_runtime_config.md`     | راه‌اندازی SPA Router، کانفیگ زمان اجرا (`/config.js`) و Interceptor توکن                                                              |
+| **06** | `06_frontend_components_and_views_structure.md`     | معماری ساختاری ویوها، چرخه حیات کامپوننت‌ها و چیدمان کلاینت SPA                                                                        |
+| **07** | `07_frontend_static_server_and_dockerfile.md`       | ساخت سرور استاتیک بدون Nginx با تفکیک 404 واقعی و داکرفایل فرانت‌اند                                                                   |
+| **08** | `08_docker_compose_and_backend_containerization.md` | داکرفایل بک‌اند، استک Docker Swarm تولید و کامپوز محلی                                                                                 |
+| **09** | `09_traefik_reverse_proxy_and_ssl.md`               | پیکربندی مسیریابی Traefik روی Swarm، لود بالانسینگ و SSL لتس‌انکریپت با nip.io                                                         |
+| **10** | `10_database_backup_and_disaster_recovery.md`       | اسکریپت‌های بکاپ اتمیک با flock، تست بازیابی دوره‌ای و سناریوهای بازگردانی                                                              |
+| **11** | `11_ci_cd_github_actions_pipeline.md`               | پایپ‌لاین اتوماتیک ساخت و انتشار ایمیج‌ها در GHCR با تگ‌های معتبر                                                                        |
+| **12** | `12_ansible_infrastructure_and_playbooks.md`        | چارچوب کامل Ansible چندتوزیعی (Debian/RHEL/Amazon Linux)، نصب خودکار پایتون، رول‌های امنیتی، Swarm، استقرار تک‌دستوری، رول‌بک و Teardown |
+| **13** | `13_verification_and_acceptance_tests.md`           | اجرای آزمون‌های پذیرش جامع A تا G و ارزیابی نهایی سیستم                                                                                |
+| **14** | `14_final_documentation_and_operations.md`          | تولید مستندات عملیاتی، راهنمای ریکاوری، دیکشنری متغیرها و تحویل نهایی                                                                 |
 
 ---
 

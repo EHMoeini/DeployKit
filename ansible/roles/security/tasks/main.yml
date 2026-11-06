@@ -9,10 +9,10 @@
   ansible.builtin.copy:
     dest: /etc/ssh/sshd_config.d/99-hardened.conf
     content: |
-      PermitRootLogin no
-      PasswordAuthentication no
+      PermitRootLogin prohibit-password
+      PasswordAuthentication {{ 'yes' if (ansible_password is defined or ansible_ssh_pass is defined) else 'no' }}
       PubkeyAuthentication yes
-      MaxAuthTries 3
+      MaxAuthTries 5
       X11Forwarding no
     mode: "0644"
   notify: Restart SSH service
@@ -22,3 +22,5 @@
     name: fail2ban
     state: started
     enabled: true
+  when: ansible_os_family == 'Debian'
+  failed_when: false

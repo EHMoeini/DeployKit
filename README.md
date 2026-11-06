@@ -79,20 +79,28 @@ EXPECTED_BACKEND_PODS=3 EXPECTED_FRONTEND_PODS=1 \
 
 ## ۴. چرخه استقرار، به‌روزرسانی خودکار، بازگشت به عقب و Teardown
 
-تمام تغییرات روی سرور از طریق Ansible انجام می‌شود؛ هیچ دستور دستی روی سرور لازم نیست.
-استک تولید شامل **۳ رپلیکای فرانت‌اند** و **۴ رپلیکای بک‌اند** است و هر استقرار از همان اجرای اول با
-`update_config` سوئرم (`parallelism: 1`، `order: start-first`، `failure_action: rollback`) به‌صورت
-**rolling update** انجام می‌شود.
+### ۴.۰. استقرار سریع و بدون نیاز به پیش‌نیاز (Turn-Key 1-Command Deployment)
+این پروژه طوری بازطراحی شده است که **هر فردی بلافاصله پس از کلون کردن** بتواند بدون نیاز به هیچ پیش‌تنظیمی روی سرور، تنها با تغییر ۲ متغیر در فایل اینونتوری و اجرای یک دستور، تمام سیستم را راه‌اندازی کند:
+
+1. فایل `ansible/inventory/production/hosts.yml` را باز کرده و آیپی سرور و یوزر/کلید SSH خود را وارد کنید. (در صورت تمایل، لینک ایمیج‌های خود یا دامنه را نیز وارد کنید؛ در غیر اینصورت به شکل خودکار از ایمیج‌های پایدار و دامنه رایگان با SSL فعال `nip.io` استفاده می‌شود).
+2. دستور استقرار را اجرا کنید:
+```bash
+./deploy.sh
+# یا مستقیماً:
+# cd ansible && ansible-playbook -i inventory/production/hosts.yml playbooks/site.yml
+```
+پلی‌بوک به شکل کاملاً خودکار پایتون ۳، داکر، داکر سوئرم، کاربر `deployer`، پروکسی معکوس Traefik با SSL رایگان، پایگاه‌داده PostgreSQL، اجرای مایگریشن‌ها، ۴ رپلیکای بک‌اند، ۳ رپلیکای فرانت‌اند، عامل به‌روزرسانی خودکار و تایمر بکاپ روزانه را نصب و پیکربندی می‌کند.
+
+### ۴.۱. دستورات عملیاتی تکمیلی
 
 ```bash
 cd ansible
 
-# راه‌اندازی اولیه: Docker Swarm، شبکه‌های overlay، Traefik، استک برنامه
-# و نصب تایمر به‌روزرسانی خودکار. پیش‌فرض image_tag برابر latest است.
+# راه‌اندازی یا به‌روزرسانی کامل زیرساخت و برنامه
 ansible-playbook -i inventory/production/hosts.yml playbooks/site.yml
 
 # استقرار دستی یک نسخه مشخص (تگ immutable) و توقف به‌روزرسانی خودکار همان سرویس
-ansible-playbook -i inventory/production/hosts.yml playbooks/deploy.yml -e "image_tag=a1b2c3d"
+ansible-playbook -i inventory/production/hosts.yml playbooks/deploy.yml -e "app_image_tag=a1b2c3d"
 
 # بازگشت فوری به نسخه قبلی؛ تا استقرار بعدی روی latest، به‌روزرسانی خودکار متوقف می‌ماند
 ansible-playbook -i inventory/production/hosts.yml playbooks/rollback.yml
@@ -161,8 +169,8 @@ ansible-playbook -i inventory/production/hosts.yml playbooks/deploy.yml \
 
 متغیرهای قابل تنظیم رول `watchtower`:
 
-| متغیر                  | پیش‌فرض | توضیح                                                              |
-| :--------------------- | :------ | :----------------------------------------------------------------- |
-| `auto_update_enabled`  | `true`  | فعال/غیرفعال کردن تایمر به‌روزرسانی خودکار                          |
-| `auto_update_interval` | `5min`  | بازه بررسی GHCR (هر مقدار معتبر `OnUnitActiveSec` در systemd)      |
-| `auto_update_tag`      | `latest`| تگ متحرکی که عامل خودکار دنبال می‌کند؛ استقرار با SHA آن را متوقف می‌کند |
+| متغیر                  | پیش‌فرض   | توضیح                                                                  |
+| :--------------------- | :------- | :--------------------------------------------------------------------- |
+| `auto_update_enabled`  | `true`   | فعال/غیرفعال کردن تایمر به‌روزرسانی خودکار                              |
+| `auto_update_interval` | `5min`   | بازه بررسی GHCR (هر مقدار معتبر `OnUnitActiveSec` در systemd)          |
+| `auto_update_tag`      | `latest` | تگ متحرکی که عامل خودکار دنبال می‌کند؛ استقرار با SHA آن را متوقف می‌کند |

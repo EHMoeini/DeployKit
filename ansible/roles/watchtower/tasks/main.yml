@@ -5,10 +5,9 @@
     - name: Validate auto-update settings
       ansible.builtin.assert:
         that:
-          - ghcr_owner | length > 0
           - auto_update_interval | length > 0
           - auto_update_tag | length > 0
-        fail_msg: "ghcr_owner, auto_update_interval and auto_update_tag must be set."
+        fail_msg: "auto_update_interval and auto_update_tag must be set."
 
     - name: Check whether this node can manage Swarm services
       ansible.builtin.command:

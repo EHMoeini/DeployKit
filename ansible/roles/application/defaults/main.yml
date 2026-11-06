@@ -1,12 +1,27 @@
 ---
-# Non-secret deployment defaults. Secrets come from Ansible Vault or -e.
+# Application deployment defaults
 app_image_tag: latest
-ghcr_owner: ""
-ghcr_repo: deploy-with-agent
+ghcr_owner: "ehmoeini"
+ghcr_repo: "deploy-with-ai-agent"
+
+# Image URLs (defaults to GitHub Container Registry, or can be overridden directly)
+backend_image: "ghcr.io/{{ ghcr_owner }}/{{ ghcr_repo }}/backend:{{ app_image_tag }}"
+frontend_image: "ghcr.io/{{ ghcr_owner }}/{{ ghcr_repo }}/frontend:{{ app_image_tag }}"
 
 backend_replicas: 4
 frontend_replicas: 3
 
+# Database configuration
 db_name: liquid_db
 db_user: liquid_user
 db_pool_max: 10
+
+# Domain default: Uses nip.io wildcard DNS if no domain is specified
+domain: "{{ ansible_host }}.nip.io"
+acme_email: "admin@{{ domain }}"
+
+# Application secrets: Fallback to auto-generated secure random strings if omitted
+db_password: "{{ lookup('password', '/dev/null chars=ascii_letters,digits length=32') }}"
+jwt_secret: "{{ lookup('password', '/dev/null chars=ascii_letters,digits length=48') }}"
+refresh_token_secret: "{{ lookup('password', '/dev/null chars=ascii_letters,digits length=48') }}"
+csrf_secret: "{{ lookup('password', '/dev/null chars=ascii_letters,digits length=48') }}"

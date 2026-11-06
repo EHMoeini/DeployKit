@@ -4,12 +4,14 @@
     path: /etc/apt/keyrings
     state: directory
     mode: "0755"
+  when: ansible_os_family == 'Debian'
 
 - name: Download Docker GPG key
   ansible.builtin.get_url:
     url: https://download.docker.com/linux/ubuntu/gpg
     dest: /etc/apt/keyrings/docker.asc
     mode: "0644"
+  when: ansible_os_family == 'Debian'
 
 - name: Add Docker repository using deb822 format
   ansible.builtin.deb822_repository:
@@ -22,8 +24,9 @@
       ["{{ 'amd64' if ansible_architecture == 'x86_64' else 'arm64' }}"]
     signed_by: /etc/apt/keyrings/docker.asc
     state: present
+  when: ansible_os_family == 'Debian'
 
-- name: Install Docker Engine and Python SDK
+- name: Install Docker Engine and Python SDK (Debian)
   ansible.builtin.apt:
     name:
       - docker-ce
@@ -34,6 +37,22 @@
       - python3-docker
     state: present
     update_cache: true
+  when: ansible_os_family == 'Debian'
+
+- name: Install Docker Engine (RedHat / Amazon Linux)
+  ansible.builtin.dnf:
+    name:
+      - docker
+      - python3-pip
+    state: present
+  when: ansible_os_family == 'RedHat'
+
+- name: Ensure Python Docker SDK is installed (RedHat / Amazon Linux)
+  ansible.builtin.command:
+    cmd: python3 -m pip install --upgrade docker
+  register: pip_docker_install
+  changed_when: "'Successfully installed' in pip_docker_install.stdout"
+  when: ansible_os_family == 'RedHat'
 
 - name: Configure Docker daemon JSON with log rotation
   ansible.builtin.copy:
@@ -54,6 +73,13 @@
     name: docker
     state: started
     enabled: true
+
+- name: Ensure deployer user belongs to docker group
+  ansible.builtin.user:
+    name: deployer
+    groups: docker
+    append: true
+  failed_when: false
 
 # Apply a pending daemon.json restart before Swarm services are deployed.
 - name: Apply pending Docker daemon changes
@@ -156,4 +182,3 @@
     driver: overlay
     attachable: true
     state: present
-

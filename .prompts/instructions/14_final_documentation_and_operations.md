@@ -6,6 +6,19 @@
 
 ## ۱. کتابچه دستورات متداول عملیاتی (Operational Runbook)
 
+### ۱.۰. استقرار اولیه تک‌دستوری روی سرور خام (Turn-key Zero-Touch Deployment)
+برای استقرار کامل برنامه روی هر سرور خام (با اوبونتو، دبیان، ردهت یا آمازون لینوکس)، تنها مراحل زیر انجام می‌شود:
+```bash
+# ۱. تنظیم آی‌پی سرور در فایل:
+nano ansible/inventory/production/hosts.yml
+
+# ۲. اجرای فرآیند استقرار با تنها یک دستور:
+./deploy.sh
+```
+این دستور به طور خودکار پایتون ۳ را روی سرور نصب کرده، فایروال و کاربر deployer را می‌سازد، داکر و سوآرم را پیکربندی کرده، گواهی SSL رایگان لتس‌انکریپت با دامنه اتوماتیک `nip.io` دریافت نموده، مایگریشن‌ها را اجرا کرده و سرویس‌ها را بالا می‌آورد.
+
+---
+
 ### ۱.۱. وضعیت سرویس‌ها و پایش لاگ‌ها
 برای پایش یکپارچه کلیه اجزای سیستم، دستورات زیر روی هاست سرور اجرا می‌شوند:
 
@@ -67,11 +80,11 @@ ansible-playbook -i inventory/production/hosts.yml playbooks/deploy.yml \
   -e "image_tag=latest auto_update_enabled=false"
 ```
 
-| متغیر Ansible          | پیش‌فرض | توضیح                                                             |
-| :--------------------- | :------ | :---------------------------------------------------------------- |
-| `auto_update_enabled`  | `true`  | فعال یا غیرفعال کردن تایمر به‌روزرسانی خودکار                      |
-| `auto_update_interval` | `5min`  | بازه بررسی GHCR (مقدار معتبر `OnUnitActiveSec` در systemd)        |
-| `auto_update_tag`      | `latest`| تگ متحرک مورد دنبال‌شده؛ سرویس pin‌شده به SHA نادیده گرفته می‌شود   |
+| متغیر Ansible          | پیش‌فرض   | توضیح                                                          |
+| :--------------------- | :------- | :------------------------------------------------------------- |
+| `auto_update_enabled`  | `true`   | فعال یا غیرفعال کردن تایمر به‌روزرسانی خودکار                   |
+| `auto_update_interval` | `5min`   | بازه بررسی GHCR (مقدار معتبر `OnUnitActiveSec` در systemd)     |
+| `auto_update_tag`      | `latest` | تگ متحرک مورد دنبال‌شده؛ سرویس pin‌شده به SHA نادیده گرفته می‌شود |
 
 **عدم تداخل با Ansible:**
 - قفل مشترک `/srv/<project>/.deploy.lock`: Ansible با `flock -w 900` و عامل خودکار با `flock -n`.
@@ -85,21 +98,23 @@ ansible-playbook -i inventory/production/hosts.yml playbooks/deploy.yml \
 
 کلیه متغیرهای محیطی سیستم بر اساس جدول زیر دسته‌بندی و ایمن‌سازی می‌شوند:
 
-| متغیر                   | سرویس                 | توضیحات                                          | حساسیت امنیتی           | پیش‌فرض / نمونه                             |
-| :---------------------- | :-------------------- | :----------------------------------------------- | :---------------------- | :----------------------------------------- |
-| `NODE_ENV`              | `backend`, `frontend` | حالت اجرای محیط برنامه‌نویسی یا عملیات            | عمومی                   | `production`                               |
-| `PORT`                  | `backend`, `frontend` | پورت داخلی شنیداری وب‌سرور نود                    | عمومی                   | `3000` (Backend) / `8080` (Frontend)       |
-| `DB_HOST`               | `backend`             | نام سرویس PostgreSQL در شبکه داخلی Swarm         | عمومی / کانفیگ          | `liquid-portal_postgres`                   |
-| `JWT_SECRET`            | `backend`             | کلید رمزنگاری امضای توکن‌های کوتاه مدت JWT        | **بسیار حساس (Secret)** | مقدار تصادفی ۶۴ کاراکتری هگز               |
-| `REFRESH_TOKEN_SECRET`  | `backend`             | کلید تولید توکن‌های رفرش                          | **بسیار حساس (Secret)** | مقدار تصادفی ۶۴ کاراکتری هگز               |
-| `CSRF_SECRET`           | `backend`             | کلید تولید هش توکن‌های ضد جعل Double Submit       | **حساس (Secret)**       | رشته ۳۲ کاراکتری تصادفی                    |
-| `DB_POOL_MAX`           | `backend`             | حداکثر اتصال استخر هر رپلیکا                     | عمومی / کانفیگ          | `10`                                       |
-| `SHARED_STORAGE_PATH`   | `backend`             | مسیر مطلق نگهداری فایل‌های آپلود شده              | عمومی                   | `/srv/portal/uploads`                      |
-| `MAX_FILE_SIZE_MB`      | `backend`             | سقف مجاز اندازه آپلود فایل به مگابایت            | عمومی                   | `5`                                        |
-| `DOMAIN`                | `traefik`, `frontend` | دامنه رسمی دسترسی به سیستم                       | عمومی                   | `portal.example.com`                       |
-| `ACME_EMAIL`            | `traefik`             | ایمیل تماس ثبت گواهی Let's Encrypt               | عمومی                   | `admin@example.com`                        |
-| `API_BASE_URL`          | `frontend`            | آدرس پایه API برای کلاینت SPA (تزریق در runtime) | عمومی                   | `/api/v1`                                  |
-| `BACKUP_RETENTION_DAYS` | `scripts`             | تعداد روزهای نگهداری بک‌آپ‌های روزانه              | عمومی                   | `7`                                        |
+| متغیر                   | سرویس                 | توضیحات                                            | حساسیت امنیتی           | پیش‌فرض / نمونه                       |
+| :---------------------- | :-------------------- | :------------------------------------------------- | :---------------------- | :----------------------------------- |
+| `NODE_ENV`              | `backend`, `frontend` | حالت اجرای محیط برنامه‌نویسی یا عملیات              | عمومی                   | `production`                         |
+| `PORT`                  | `backend`, `frontend` | پورت داخلی شنیداری وب‌سرور نود                      | عمومی                   | `3000` (Backend) / `8080` (Frontend) |
+| `DB_HOST`               | `backend`             | نام سرویس PostgreSQL در شبکه داخلی Swarm           | عمومی / کانفیگ          | `liquid-portal_postgres`             |
+| `JWT_SECRET`            | `backend`             | کلید رمزنگاری امضای توکن‌های کوتاه مدت JWT          | **بسیار حساس (Secret)** | مقدار تصادفی ۶۴ کاراکتری هگز         |
+| `REFRESH_TOKEN_SECRET`  | `backend`             | کلید تولید توکن‌های رفرش                            | **بسیار حساس (Secret)** | مقدار تصادفی ۶۴ کاراکتری هگز         |
+| `CSRF_SECRET`           | `backend`             | کلید تولید هش توکن‌های ضد جعل Double Submit         | **حساس (Secret)**       | رشته ۳۲ کاراکتری تصادفی              |
+| `DB_POOL_MAX`           | `backend`             | حداکثر اتصال استخر هر رپلیکا                       | عمومی / کانفیگ          | `10`                                 |
+| `SHARED_STORAGE_PATH`   | `backend`             | مسیر مطلق نگهداری فایل‌های آپلود شده                | عمومی                   | `/srv/portal/uploads`                |
+| `MAX_FILE_SIZE_MB`      | `backend`             | سقف مجاز اندازه آپلود فایل به مگابایت              | عمومی                   | `5`                                  |
+| `DOMAIN`                | `traefik`, `frontend` | دامنه رسمی دسترسی به سیستم (پیش‌فرض: nip.io خودکار) | عمومی                   | `{{ ansible_host }}.nip.io`          |
+| `BACKEND_IMAGE`         | `ansible`, `compose`  | آدرس کامل ایمیج کانتینر بک‌اند                      | عمومی                   | `ghcr.io/user/backend:latest`        |
+| `FRONTEND_IMAGE`        | `ansible`, `compose`  | آدرس کامل ایمیج کانتینر فرانت‌اند                   | عمومی                   | `ghcr.io/user/frontend:latest`       |
+| `ACME_EMAIL`            | `traefik`             | ایمیل تماس ثبت گواهی Let's Encrypt                 | عمومی                   | `admin@example.com`                  |
+| `API_BASE_URL`          | `frontend`            | آدرس پایه API برای کلاینت SPA (تزریق در runtime)   | عمومی                   | `/api/v1`                            |
+| `BACKUP_RETENTION_DAYS` | `scripts`             | تعداد روزهای نگهداری بک‌آپ‌های روزانه                | عمومی                   | `7`                                  |
 
 ---
 

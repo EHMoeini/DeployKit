@@ -186,8 +186,9 @@ networks:
 ---
 
 ### ۲.۳. استک تولید Docker Swarm (`docker-compose.yml`)
-این فایل صرفاً از ایمیج‌های GHCR استفاده می‌کند و برای `docker stack deploy` طراحی می‌شود. پیاده‌سازی باید این ویژگی‌ها را داشته باشد:
+این فایل استک اصلی سرویس‌ها را برای `docker stack deploy` مشخص می‌کند و از متغیرهای انعطاف‌پذیر `${BACKEND_IMAGE}` و `${FRONTEND_IMAGE}` استفاده می‌کند تا کاربر بتواند بدون تغییر فایل استک، ایمیج‌ها را از GitHub Container Registry (GHCR)، Docker Hub یا رجیستری‌های خصوصی مستقر کند. پیاده‌سازی باید این ویژگی‌ها را داشته باشد:
 
+- استفاده از متغیرهای `${BACKEND_IMAGE}` و `${FRONTEND_IMAGE}` جهت انعطاف‌پذیری منبع ایمیج کانتینرها.
 - سرویس فرانت‌اند با ۳ رپلیکا و سرویس بک‌اند با ۴ رپلیکا؛ PostgreSQL تک‌نسخه و pinned به نود manager.
 - استفاده از `deploy.replicas`، `deploy.update_config` با ترتیب `start-first`، `deploy.restart_policy` و `deploy.labels`.
 - `update_config` باید `parallelism: 1`، `order: start-first`، `failure_action: rollback` و `monitor` داشته باشد تا هم استقرار اولیه Ansible و هم به‌روزرسانی خودکار عامل `watchtower` به‌صورت rolling و بدون قطعی انجام شود.

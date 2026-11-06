@@ -2,6 +2,7 @@
 - name: Determine current SSH port
   ansible.builtin.set_fact:
     active_ssh_port: "{{ ansible_port | default(22) }}"
+  when: ansible_os_family == 'Debian'
 
 - name: Set UFW default policies (deny incoming, allow outgoing)
   community.general.ufw:
@@ -10,6 +11,7 @@
   loop:
     - { direction: "incoming", policy: "deny" }
     - { direction: "outgoing", policy: "allow" }
+  when: ansible_os_family == 'Debian'
 
 - name: Ensure SSH access is explicitly allowed BEFORE enabling firewall (Anti-Lockout)
   community.general.ufw:
@@ -17,6 +19,7 @@
     port: "{{ active_ssh_port }}"
     proto: tcp
     comment: "Management SSH Access"
+  when: ansible_os_family == 'Debian'
 
 - name: Allow HTTP and HTTPS traffic for Traefik
   community.general.ufw:
@@ -27,6 +30,7 @@
   loop:
     - "80"
     - "443"
+  when: ansible_os_family == 'Debian'
 
 - name: Prevent Docker bypass - Ensure PostgreSQL port is NOT publicly exposed
   community.general.ufw:
@@ -34,7 +38,9 @@
     port: "5432"
     proto: tcp
     comment: "Block Public Postgres"
+  when: ansible_os_family == 'Debian'
 
 - name: Enable UFW service
   community.general.ufw:
     state: enabled
+  when: ansible_os_family == 'Debian'

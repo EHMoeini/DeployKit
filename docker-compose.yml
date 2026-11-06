@@ -33,7 +33,7 @@ services:
         failure_action: pause
 
   backend:
-    image: ghcr.io/${GHCR_OWNER}/${GHCR_REPO}/backend:${IMAGE_TAG}
+    image: ${BACKEND_IMAGE}
     environment:
       NODE_ENV: production
       PORT: 3000
@@ -89,7 +89,7 @@ services:
         - "traefik.http.services.${PROJECT_NAME}_backend.loadbalancer.server.port=3000"
 
   frontend:
-    image: ghcr.io/${GHCR_OWNER}/${GHCR_REPO}/frontend:${IMAGE_TAG}
+    image: ${FRONTEND_IMAGE}
     environment:
       NODE_ENV: production
       PORT: 8080

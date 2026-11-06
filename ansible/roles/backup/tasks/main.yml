@@ -1,4 +1,12 @@
 ---
+- name: Ensure backup scripts directory exists
+  ansible.builtin.file:
+    path: "/srv/{{ project_name }}/scripts"
+    state: directory
+    owner: deployer
+    group: deployer
+    mode: "0755"
+
 - name: Copy backup and disaster recovery scripts
   ansible.builtin.copy:
     src: "../../../scripts/{{ item }}"

@@ -2,14 +2,13 @@
 - name: Validate required deployment variables
   ansible.builtin.assert:
     that:
-      - ghcr_owner | length > 0
+      - (backend_image is defined and backend_image | length > 0) or (ghcr_owner is defined and ghcr_owner | length > 0)
       - db_password is defined and db_password | length > 0
       - jwt_secret is defined and jwt_secret | length > 0
       - refresh_token_secret is defined and refresh_token_secret | length > 0
       - csrf_secret is defined and csrf_secret | length > 0
     fail_msg: >-
-      Set ghcr_owner and the application secrets (db_password, jwt_secret,
-      refresh_token_secret, csrf_secret) through Ansible Vault or -e.
+      Ensure image paths and application secrets are defined.
 
 - name: Create application directory layout
   ansible.builtin.file:
@@ -94,12 +93,12 @@
       - application_swarm_state.stdout == 'active'
     fail_msg: "Run ansible/playbooks/site.yml first to initialize Docker Swarm."
 
-- name: Log in to GitHub Container Registry
+- name: Log in to Container Registry
   community.docker.docker_login:
-    registry: ghcr.io
-    username: "{{ ghcr_owner }}"
-    password: "{{ ghcr_token }}"
-  when: ghcr_token is defined and ghcr_token | length > 0
+    registry: "{{ registry_url | default('ghcr.io') }}"
+    username: "{{ registry_username | default(ghcr_owner) }}"
+    password: "{{ registry_password | default(ghcr_token) }}"
+  when: (registry_password is defined and registry_password | length > 0) or (ghcr_token is defined and ghcr_token | length > 0)
   no_log: true
 
 - name: Build the stack deployment environment
@@ -110,8 +109,10 @@
       ACME_EMAIL: "{{ acme_email | default('admin@' ~ domain) }}"
       API_BASE_URL: "/api/v1"
       IMAGE_TAG: "{{ app_image_tag }}"
-      GHCR_OWNER: "{{ ghcr_owner }}"
-      GHCR_REPO: "{{ ghcr_repo }}"
+      GHCR_OWNER: "{{ ghcr_owner | default('') }}"
+      GHCR_REPO: "{{ ghcr_repo | default('') }}"
+      BACKEND_IMAGE: "{{ backend_image }}"
+      FRONTEND_IMAGE: "{{ frontend_image }}"
       DB_NAME: "{{ db_name }}"
       DB_USER: "{{ db_user }}"
       DB_PASSWORD: "{{ db_password }}"
@@ -192,7 +193,7 @@
       - app-internal
       - --env-file
       - "/srv/{{ project_name }}/.env"
-      - "ghcr.io/{{ ghcr_owner }}/{{ ghcr_repo }}/backend:{{ app_image_tag }}"
+      - "{{ backend_image }}"
       - node
       - src/config/run-migrations.js
   register: migration_result
@@ -219,7 +220,16 @@
 
 - name: Wait for PostgreSQL replica to converge
   ansible.builtin.command:
-    argv: [docker, service, ls, --filter, "name={{ project_name }}_postgres", --format, "{% raw %}{{.Replicas}}{% endraw %}"]
+    argv:
+      [
+        docker,
+        service,
+        ls,
+        --filter,
+        "name={{ project_name }}_postgres",
+        --format,
+        "{% raw %}{{.Replicas}}{% endraw %}",
+      ]
   register: postgres_service
   until: postgres_service.stdout == '1/1'
   retries: 30
@@ -228,7 +238,16 @@
 
 - name: Wait for backend replicas to converge
   ansible.builtin.command:
-    argv: [docker, service, ls, --filter, "name={{ project_name }}_backend", --format, "{% raw %}{{.Replicas}}{% endraw %}"]
+    argv:
+      [
+        docker,
+        service,
+        ls,
+        --filter,
+        "name={{ project_name }}_backend",
+        --format,
+        "{% raw %}{{.Replicas}}{% endraw %}",
+      ]
   register: backend_service
   until: backend_service.stdout == (backend_replicas | string) ~ '/' ~ (backend_replicas | string)
   retries: 40
@@ -237,7 +256,16 @@
 
 - name: Wait for frontend replicas to converge
   ansible.builtin.command:
-    argv: [docker, service, ls, --filter, "name={{ project_name }}_frontend", --format, "{% raw %}{{.Replicas}}{% endraw %}"]
+    argv:
+      [
+        docker,
+        service,
+        ls,
+        --filter,
+        "name={{ project_name }}_frontend",
+        --format,
+        "{% raw %}{{.Replicas}}{% endraw %}",
+      ]
   register: frontend_service
   until: frontend_service.stdout == (frontend_replicas | string) ~ '/' ~ (frontend_replicas | string)
   retries: 40
@@ -252,7 +280,7 @@
       - --rm
       - --network
       - app-internal
-      - "ghcr.io/{{ ghcr_owner }}/{{ ghcr_repo }}/backend:{{ app_image_tag }}"
+      - "{{ backend_image }}"
       - wget
       - -qO-
       - "http://{{ project_name }}_backend:3000/health/ready"

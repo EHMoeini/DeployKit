@@ -26,6 +26,25 @@ mkdir -p ansible/{inventory/{development,staging,production}/group_vars,playbook
 mkdir -p docs
 ```
 
+همچنین اسکریپت‌های اجرایی تک‌دستوری `deploy.sh` در ریشه مخزن و `ansible/deploy.sh` را با مجوز اجرایی `chmod +x` ایجاد کن تا کاربران بتوانند فرآیند دپلوی را تنها با یک دستور اجرا کنند:
+
+```bash
+#!/usr/bin/env bash
+# ==============================================================================
+# Single-Command Deployment Script / اسکریپت دپلوی با یک دستور
+# ==============================================================================
+set -e
+
+BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/ansible" && pwd)"
+export ANSIBLE_CONFIG="${BASE_DIR}/ansible.cfg"
+
+echo "========================================================"
+echo "🚀 Starting Automated Turn-Key Deployment"
+echo "========================================================"
+
+ansible-playbook -i "${BASE_DIR}/inventory/production/hosts.yml" "${BASE_DIR}/playbooks/site.yml" "$@"
+```
+
 ### ۲.۲. پیکربندی فایل جامع `.gitignore`
 یک فایل `.gitignore` استاندارد در ریشه پروژه ایجاد کن که مانع ثبت فایل‌های حساس، خروجی‌های بیلد و دایرکتوری‌های داده در Git شود:
 
@@ -86,8 +105,15 @@ Thumbs.db
 # ==============================================================================
 NODE_ENV=production
 PROJECT_NAME=liquid-portal
+# Domain is optional. If not set, it defaults to: {{ ansible_host }}.nip.io (free wildcard SSL)
 DOMAIN=example.com
 API_BASE_URL=/api/v1
+
+# ==============================================================================
+# Container Images (Docker Hub, GHCR, or private registry)
+# ==============================================================================
+BACKEND_IMAGE=ghcr.io/your-github-username/backend:latest
+FRONTEND_IMAGE=ghcr.io/your-github-username/frontend:latest
 
 # ==============================================================================
 # Backend Configuration
