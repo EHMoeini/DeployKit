@@ -9,7 +9,7 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes:
       # Stateful service: the data directory lives on the Swarm manager node.
-      - /srv/${PROJECT_NAME}/postgres/data:/var/lib/postgresql/data
+      - /srv/${PROJECT_NAME:-liquid-portal}/postgres/data:/var/lib/postgresql/data
     networks:
       - app-internal
     healthcheck:
@@ -37,7 +37,7 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3000
-      DB_HOST: ${PROJECT_NAME}_postgres
+      DB_HOST: ${PROJECT_NAME:-liquid-portal}_postgres
       DB_PORT: 5432
       DB_NAME: ${DB_NAME}
       DB_USER: ${DB_USER}
@@ -50,7 +50,7 @@ services:
     volumes:
       # Single-node Swarm: all replicas share the host path.
       # shortcut: local bind mount, move uploads to shared storage (NFS/S3) before multi-node Swarm.
-      - /srv/${PROJECT_NAME}/uploads:/srv/portal/uploads
+      - /srv/${PROJECT_NAME:-liquid-portal}/uploads:/srv/portal/uploads
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:3000/health/live || exit 1"]
       interval: 20s
@@ -81,7 +81,7 @@ services:
       labels:
         - "traefik.enable=true"
         - "traefik.swarm.network=traefik-public"
-        - "traefik.http.routers.${PROJECT_NAME}_backend.rule=Host(`${DOMAIN}`) && PathPrefix(`/api/`)"
+        - "traefik.http.routers.${PROJECT_NAME}_backend.rule=(Host(`${DOMAIN}`) || Host(`www.${DOMAIN}`)) && PathPrefix(`/api/`)"
         - "traefik.http.routers.${PROJECT_NAME}_backend.priority=100"
         - "traefik.http.routers.${PROJECT_NAME}_backend.entrypoints=websecure"
         - "traefik.http.routers.${PROJECT_NAME}_backend.tls=true"
@@ -124,7 +124,7 @@ services:
       labels:
         - "traefik.enable=true"
         - "traefik.swarm.network=traefik-public"
-        - "traefik.http.routers.${PROJECT_NAME}_frontend.rule=Host(`${DOMAIN}`)"
+        - "traefik.http.routers.${PROJECT_NAME}_frontend.rule=Host(`${DOMAIN}`) || Host(`www.${DOMAIN}`)"
         - "traefik.http.routers.${PROJECT_NAME}_frontend.priority=10"
         - "traefik.http.routers.${PROJECT_NAME}_frontend.entrypoints=websecure"
         - "traefik.http.routers.${PROJECT_NAME}_frontend.tls=true"
