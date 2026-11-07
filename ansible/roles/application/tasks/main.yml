@@ -106,6 +106,7 @@
     stack_environment:
       PROJECT_NAME: "{{ project_name }}"
       DOMAIN: "{{ domain }}"
+      SERVER_IP: "{{ ansible_host }}"
       ACME_EMAIL: "{{ acme_email | default('admin@' ~ domain) }}"
       API_BASE_URL: "/api/v1"
       IMAGE_TAG: "{{ app_image_tag }}"

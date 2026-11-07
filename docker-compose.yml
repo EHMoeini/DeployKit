@@ -81,7 +81,7 @@ services:
       labels:
         - "traefik.enable=true"
         - "traefik.swarm.network=traefik-public"
-        - "traefik.http.routers.${PROJECT_NAME}_backend.rule=(Host(`${DOMAIN}`) || Host(`www.${DOMAIN}`)) && PathPrefix(`/api/`)"
+        - "traefik.http.routers.${PROJECT_NAME}_backend.rule=(Host(`${DOMAIN}`) || Host(`www.${DOMAIN}`) || Host(`${SERVER_IP:-192.168.73.5}`)) && PathPrefix(`/api/`)"
         - "traefik.http.routers.${PROJECT_NAME}_backend.priority=100"
         - "traefik.http.routers.${PROJECT_NAME}_backend.entrypoints=websecure"
         - "traefik.http.routers.${PROJECT_NAME}_backend.tls=true"
@@ -124,7 +124,7 @@ services:
       labels:
         - "traefik.enable=true"
         - "traefik.swarm.network=traefik-public"
-        - "traefik.http.routers.${PROJECT_NAME}_frontend.rule=Host(`${DOMAIN}`) || Host(`www.${DOMAIN}`)"
+        - "traefik.http.routers.${PROJECT_NAME}_frontend.rule=Host(`${DOMAIN}`) || Host(`www.${DOMAIN}`) || Host(`${SERVER_IP:-192.168.73.5}`)"
         - "traefik.http.routers.${PROJECT_NAME}_frontend.priority=10"
         - "traefik.http.routers.${PROJECT_NAME}_frontend.entrypoints=websecure"
         - "traefik.http.routers.${PROJECT_NAME}_frontend.tls=true"
