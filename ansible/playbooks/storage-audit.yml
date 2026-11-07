@@ -4,7 +4,7 @@
   become: true
   tasks:
     - name: Gather block devices and partition layout
-      ansible.builtin.command: lsblk -e7 -o NAME,SIZE,TYPE,FSTYPE,MOUNTPOINTS,UUID,MODEL
+      ansible.builtin.command: lsblk -e7 -o NAME,SIZE,TYPE,FSTYPE,MOUNTPOINT,UUID,MODEL
       register: lsblk_out
       changed_when: false
 

@@ -1,6 +1,6 @@
 ---
 - name: Audit disk partition layout (read-only)
-  ansible.builtin.command: lsblk -e7 -o NAME,SIZE,TYPE,FSTYPE,MOUNTPOINTS,UUID,MODEL
+  ansible.builtin.command: lsblk -e7 -o NAME,SIZE,TYPE,FSTYPE,MOUNTPOINT,UUID,MODEL
   register: disk_layout
   changed_when: false
 
