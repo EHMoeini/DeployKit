@@ -10,7 +10,7 @@ services:
       - "--providers.docker.exposedbydefault=false"
       - "--entrypoints.web.address=:80"
     ports:
-      - "${LOCAL_HTTP_PORT:-80}:80"
+      - "${LOCAL_HTTP_PORT:-8000}:80"
       - "${LOCAL_TRAEFIK_PORT:-8081}:8080" # داشبورد محلی Traefik
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
@@ -54,14 +54,14 @@ services:
     networks:
       - app-net
 
-  # سرویس Backend (پورت مستقیم 3000 برای توسعه لوکال؛ در زمان اسکیل از طریق Traefik روی پورت 80 هدایت می‌شود)
+  # سرویس Backend (پورت مستقیم 3000 برای توسعه لوکال؛ محدوده پورت امکان اسکیل چندتایی را فراهم می‌کند)
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
     restart: unless-stopped
     ports:
-      - "${LOCAL_BACKEND_PORT:-3000}:3000"
+      - "${LOCAL_BACKEND_PORT:-3000-3005}:3000"
     environment:
       NODE_ENV: development
       PORT: 3000

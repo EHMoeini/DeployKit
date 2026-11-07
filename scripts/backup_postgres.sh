@@ -2,12 +2,37 @@
 set -Eeuo pipefail
 
 PROJECT_NAME="${PROJECT_NAME:-liquid-portal}"
-CONTAINER_NAME="${CONTAINER_NAME:-$(docker ps -q -f "label=com.docker.swarm.service.name=${PROJECT_NAME}_postgres" | head -n 1)}"
+
+# تشخیص خودکار کانتینر دیتابیس (سارم پروداکشن یا لوکال داکر کامپوز)
+CONTAINER_NAME="${CONTAINER_NAME:-}"
+if [ -z "${CONTAINER_NAME}" ]; then
+  CONTAINER_NAME="$(docker ps -q -f "name=local_postgres" | head -n 1)"
+  if [ -z "${CONTAINER_NAME}" ]; then
+    CONTAINER_NAME="$(docker ps -q -f "label=com.docker.swarm.service.name=${PROJECT_NAME}_postgres" | head -n 1)"
+  fi
+  if [ -z "${CONTAINER_NAME}" ]; then
+    CONTAINER_NAME="$(docker ps -q -f "name=postgres" | head -n 1)"
+  fi
+fi
+
 DB_NAME="${DB_NAME:-portal_db}"
 DB_USER="${DB_USER:-portal_user}"
-BACKUP_ROOT="${BACKUP_ROOT:-/srv/${PROJECT_NAME}/backups/postgres}"
+
+# در صورت عدم دسترسی به /srv، مسیر لوکال در پوشه پروژه استفاده می‌شود
+if [ -z "${BACKUP_ROOT:-}" ]; then
+  if [ -w "/srv" ] || ([ -d "/srv/${PROJECT_NAME}" ] && [ -w "/srv/${PROJECT_NAME}" ]); then
+    BACKUP_ROOT="/srv/${PROJECT_NAME}/backups/postgres"
+    DEFAULT_LOCK="/var/lock/postgres_backup_${PROJECT_NAME}.lock"
+  else
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    APP_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+    BACKUP_ROOT="${APP_DIR}/backups/postgres"
+    DEFAULT_LOCK="/tmp/postgres_backup_${PROJECT_NAME}.lock"
+  fi
+fi
+
 LOG_FILE="${LOG_FILE:-${BACKUP_ROOT}/logs/backup.log}"
-LOCK_FILE="${LOCK_FILE:-/var/lock/postgres_backup_${PROJECT_NAME}.lock}"
+LOCK_FILE="${LOCK_FILE:-${DEFAULT_LOCK:-/tmp/postgres_backup_${PROJECT_NAME}.lock}}"
 
 mkdir -p "${BACKUP_ROOT}/"{daily,weekly,monthly,logs}
 

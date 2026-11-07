@@ -13,13 +13,17 @@ CYAN='\033[0;36m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-# دریافت آدرس پایه (پیش‌فرض: بررسی پورت 3000 و سپس پورت 80)
+# دریافت آدرس پایه (پیش‌فرض: بررسی پورت 8000، 3000 و سپس پورت 80)
 TARGET_URL="${1:-}"
 if [ -z "${TARGET_URL}" ]; then
-  if curl -s --connect-timeout 1 "http://localhost:3000/api/health" >/dev/null 2>&1; then
+  if curl -s --connect-timeout 1 "http://localhost:8000/api/v1/health" >/dev/null 2>&1; then
+    TARGET_URL="http://localhost:8000"
+  elif curl -s --connect-timeout 1 "http://localhost:3000/api/v1/health" >/dev/null 2>&1; then
     TARGET_URL="http://localhost:3000"
-  else
+  elif curl -s --connect-timeout 1 "http://localhost/api/v1/health" >/dev/null 2>&1; then
     TARGET_URL="http://localhost"
+  else
+    TARGET_URL="http://localhost:8000"
   fi
 fi
 
@@ -50,7 +54,8 @@ extract_json() {
 }
 
 COOKIE_JAR=$(mktemp)
-trap 'rm -f "${COOKIE_JAR}"' EXIT
+HEADER_DUMP=$(mktemp)
+trap 'rm -f "${COOKIE_JAR}" "${HEADER_DUMP}"' EXIT
 
 # ۱. تلاش برای ثبت‌نام کاربر آزمایشی
 echo -e "\n${YELLOW}[۱/۳] تلاش برای ثبت‌نام یا ورود کاربر...${NC}"
@@ -62,28 +67,27 @@ REG_PAYLOAD=$(cat <<EOF
 EOF
 )
 
-AUTH_RES=$(curl -s -w "\nHTTP_STATUS:%{http_code}\nPOD_HEADER:%{header{x-pod-id}}\n" \
+BODY=$(curl -s -D "${HEADER_DUMP}" \
   -c "${COOKIE_JAR}" \
   -X POST "${API_URL}/auth/register" \
   -H "Content-Type: application/json" \
   -d "${REG_PAYLOAD}" || true)
 
-HTTP_STATUS=$(echo "${AUTH_RES}" | grep "HTTP_STATUS:" | cut -d':' -f2)
-POD_ID=$(echo "${AUTH_RES}" | grep "POD_HEADER:" | cut -d':' -f2)
-BODY=$(echo "${AUTH_RES}" | sed -e '/HTTP_STATUS:/d' -e '/POD_HEADER:/d')
+HTTP_STATUS=$(head -n 1 "${HEADER_DUMP}" 2>/dev/null | awk '{print $2}' || echo "000")
+POD_ID=$(grep -i '^x-pod-id:' "${HEADER_DUMP}" 2>/dev/null | cut -d':' -f2 | tr -d '\r\n ' || true)
 
 # اگر قبلاً ثبت شده بود، لاگین می‌کنیم
 if [ "${HTTP_STATUS}" = "409" ] || [ "${HTTP_STATUS}" = "400" ]; then
   echo -e "   ℹ️ کاربر قبلاً ثبت شده است؛ ارسال درخواست لاگین..."
-  AUTH_RES=$(curl -s -w "\nHTTP_STATUS:%{http_code}\nPOD_HEADER:%{header{x-pod-id}}\n" \
+  rm -f "${HEADER_DUMP}"
+  BODY=$(curl -s -D "${HEADER_DUMP}" \
     -c "${COOKIE_JAR}" \
     -X POST "${API_URL}/auth/login" \
     -H "Content-Type: application/json" \
     -d "${REG_PAYLOAD}")
 
-  HTTP_STATUS=$(echo "${AUTH_RES}" | grep "HTTP_STATUS:" | cut -d':' -f2)
-  POD_ID=$(echo "${AUTH_RES}" | grep "POD_HEADER:" | cut -d':' -f2)
-  BODY=$(echo "${AUTH_RES}" | sed -e '/HTTP_STATUS:/d' -e '/POD_HEADER:/d')
+  HTTP_STATUS=$(head -n 1 "${HEADER_DUMP}" 2>/dev/null | awk '{print $2}' || echo "000")
+  POD_ID=$(grep -i '^x-pod-id:' "${HEADER_DUMP}" 2>/dev/null | cut -d':' -f2 | tr -d '\r\n ' || true)
 fi
 
 if [ "${HTTP_STATUS}" != "200" ] && [ "${HTTP_STATUS}" != "201" ]; then

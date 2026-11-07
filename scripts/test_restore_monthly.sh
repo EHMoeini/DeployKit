@@ -2,8 +2,21 @@
 set -Eeuo pipefail
 
 PROJECT_NAME="${PROJECT_NAME:-liquid-portal}"
-BACKUP_ROOT="/srv/${PROJECT_NAME}/backups/postgres"
-LATEST_BACKUP=$(find "${BACKUP_ROOT}/daily" -name "backup_*.dump" -type f 2>/dev/null | sort -r | head -n 1)
+
+# تعیین مسیر بکاپ با پشتیبانی از محیط لوکال
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+APP_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+BACKUP_ROOT="${BACKUP_ROOT:-}"
+if [ -z "${BACKUP_ROOT}" ]; then
+  if [ -d "/srv/${PROJECT_NAME}/backups/postgres" ]; then
+    BACKUP_ROOT="/srv/${PROJECT_NAME}/backups/postgres"
+  else
+    BACKUP_ROOT="${APP_DIR}/backups/postgres"
+  fi
+fi
+
+LATEST_BACKUP=$(find "${BACKUP_ROOT}/daily" "${APP_DIR}/backups/postgres/daily" -name "backup_*.dump" -type f 2>/dev/null | sort -r | head -n 1 || true)
 
 if [ -z "${LATEST_BACKUP}" ]; then
   echo "ERROR: No backup found to test!"
@@ -31,9 +44,19 @@ until docker exec "${TEST_CONTAINER}" pg_isready -U postgres -d test_db > /dev/n
   sleep 1
 done
 
+# بازگردانی رول‌ها و کانفیگ‌های عمومی در صورت وجود
+LATEST_GLOBALS="${LATEST_BACKUP/backup_/globals_}"
+LATEST_GLOBALS="${LATEST_GLOBALS/.dump/.sql}"
+if [ -f "${LATEST_GLOBALS}" ]; then
+  echo "[RESTORE-TEST] Restoring server globals and roles..."
+  docker exec -i "${TEST_CONTAINER}" psql -U postgres < "${LATEST_GLOBALS}" > /dev/null 2>&1 || true
+else
+  docker exec -i "${TEST_CONTAINER}" psql -U postgres -c "CREATE ROLE portal_user LOGIN;" > /dev/null 2>&1 || true
+fi
+
 # اجرای Restore
 echo "[RESTORE-TEST] Restoring dump into isolated test database..."
-docker exec -i "${TEST_CONTAINER}" pg_restore -U postgres -d test_db --clean --if-exists < "${LATEST_BACKUP}" || true
+docker exec -i "${TEST_CONTAINER}" pg_restore -U postgres -d test_db --clean --if-exists --no-owner < "${LATEST_BACKUP}" || true
 
 # اعتبارسنجی کوئری‌ها روی جداول بازیابی‌شده
 echo "[RESTORE-TEST] Running verification queries..."

@@ -3,8 +3,16 @@ set -Eeuo pipefail
 
 BACKUP_FILE="${1:-}"
 
+# اگر فایل مشخص نشده بود، آخرین فایل بکاپ روزانه را پیدا می‌کنیم
+if [ -z "${BACKUP_FILE}" ]; then
+  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  APP_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+  BACKUP_FILE="$(find "${APP_DIR}/backups/postgres" /srv/*/backups/postgres -type f -name "backup_*.dump" 2>/dev/null | sort -r | head -n 1 || true)"
+fi
+
 if [ -z "${BACKUP_FILE}" ] || [ ! -f "${BACKUP_FILE}" ]; then
   echo "Usage: $0 <path-to-backup-file.dump>"
+  echo "Or create a backup first using: bash scripts/backup_postgres.sh"
   exit 1
 fi
 
