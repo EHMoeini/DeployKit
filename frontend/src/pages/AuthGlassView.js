@@ -109,7 +109,7 @@ export class AuthGlassView {
           <div class="welcome-header">
             <div class="welcome-meta">
               <h2 class="welcome-greeting-title">خوش آمدید، <span class="welcome-username-highlight">${username}</span></h2>
-              <p class="welcome-subtext">نشست کاربری شما فعال و متصل به کلاستر است</p>
+              <p class="welcome-subtext">نشست کاربری شما فعال است</p>
             </div>
           </div>
 
