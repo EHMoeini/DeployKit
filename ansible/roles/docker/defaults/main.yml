@@ -1,2 +1,12 @@
 ---
-docker_user: "{{ deploy_user | default(ansible_user | default('deployer')) }}"
+docker_apt_keyring_dir: "/etc/apt/keyrings"
+docker_apt_keyring_path: "/etc/apt/keyrings/docker.asc"
+docker_apt_repo_url: "https://download.docker.com/linux/ubuntu"
+docker_packages:
+  - docker-ce
+  - docker-ce-cli
+  - containerd.io
+  - docker-buildx-plugin
+  - docker-compose-plugin
+docker_users:
+  - "{{ ansible_user | default('ubuntu') }}"

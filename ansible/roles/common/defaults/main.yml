@@ -1,3 +1,29 @@
 ---
-deploy_user: "{{ custom_user | default('deployer') }}"
-deploy_group: "{{ custom_group | default('deployer') }}"
+# Supported operating system distribution and versions
+deploykit_supported_os: "Ubuntu"
+deploykit_supported_versions:
+  - "22.04"
+  - "24.04"
+deploykit_supported_codenames:
+  - "jammy"
+  - "noble"
+
+# Essential base packages for Ubuntu
+deploykit_base_packages:
+  - ca-certificates
+  - curl
+  - gnupg
+  - lsb-release
+  - software-properties-common
+  - ufw
+  - unattended-upgrades
+  - tzdata
+  - htop
+  - jq
+
+# Default server timezone
+deploykit_timezone: "UTC"
+
+# Deployment user and primary group
+deploy_user: "{{ custom_user | default('ubuntu') }}"
+deploy_group: "{{ custom_group | default('ubuntu') }}"

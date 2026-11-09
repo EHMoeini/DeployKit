@@ -1,56 +1,20 @@
 ---
-- name: Update apt package cache
+- name: "Update APT package cache"
   ansible.builtin.apt:
     update_cache: true
     cache_valid_time: 3600
-  when: ansible_os_family == 'Debian'
 
-- name: Upgrade all safe packages
+- name: "Install base system packages"
   ansible.builtin.apt:
-    upgrade: dist
-  when: ansible_os_family == 'Debian'
-
-- name: Install fundamental system packages (Debian)
-  ansible.builtin.apt:
-    name:
-      - curl
-      - git
-      - htop
-      - jq
-      - ca-certificates
-      - gnupg
-      - lsb-release
-      - tar
-      - unzip
-      - ufw
-      - fail2ban
-    state: present
-  when: ansible_os_family == 'Debian'
-
-- name: Install fundamental system packages (RedHat)
-  ansible.builtin.dnf:
-    name:
-      - git
-      - htop
-      - jq
-      - ca-certificates
-      - tar
-      - unzip
-    state: present
-  when: ansible_os_family == 'RedHat'
-
-- name: Ensure deploy group exists
-  ansible.builtin.group:
-    name: "{{ deploy_group }}"
+    name: "{{ deploykit_base_packages }}"
     state: present
 
-- name: Ensure deploy user exists
-  ansible.builtin.user:
-    name: "{{ deploy_user }}"
-    group: "{{ deploy_group }}"
-    groups:
-      - "{{ 'sudo' if ansible_os_family == 'Debian' else 'wheel' }}"
-    append: true
-    shell: /bin/bash
-    state: present
-    create_home: true
+- name: "Set system timezone"
+  ansible.builtin.timezone:
+    name: "{{ deploykit_timezone }}"
+
+- name: "Enable and start time synchronization service (systemd-timesyncd)"
+  ansible.builtin.systemd:
+    name: systemd-timesyncd
+    state: started
+    enabled: true

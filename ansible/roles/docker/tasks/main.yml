@@ -1,97 +1,41 @@
 ---
-- name: Ensure apt keyrings directory exists
+- name: "Ensure APT keyrings directory exists"
   ansible.builtin.file:
-    path: /etc/apt/keyrings
+    path: "{{ docker_apt_keyring_dir }}"
     state: directory
-    mode: "0755"
-  when: ansible_os_family == 'Debian'
+    mode: '0755'
 
-- name: Download Docker GPG key
+- name: "Download official Docker GPG key for Ubuntu"
   ansible.builtin.get_url:
-    url: https://download.docker.com/linux/ubuntu/gpg
-    dest: /etc/apt/keyrings/docker.asc
-    mode: "0644"
-  when: ansible_os_family == 'Debian'
+    url: "https://download.docker.com/linux/ubuntu/gpg"
+    dest: "{{ docker_apt_keyring_path }}"
+    mode: '0644'
 
-- name: Add Docker repository using deb822 format
-  ansible.builtin.deb822_repository:
-    name: docker
-    types: [deb]
-    uris: https://download.docker.com/linux/ubuntu
-    suites: ["{{ ansible_distribution_release }}"]
-    components: [stable]
-    architectures:
-      ["{{ 'amd64' if ansible_architecture == 'x86_64' else 'arm64' }}"]
-    signed_by: /etc/apt/keyrings/docker.asc
+- name: "Add official Docker APT repository for Ubuntu"
+  ansible.builtin.apt_repository:
+    repo: >-
+      deb [arch={{ ansible_architecture | replace('x86_64', 'amd64') | replace('aarch64', 'arm64') }}
+      signed-by={{ docker_apt_keyring_path }}]
+      {{ docker_apt_repo_url }}
+      {{ ansible_distribution_release }} stable
     state: present
-  when: ansible_os_family == 'Debian'
+    filename: docker
 
-- name: Install Docker Engine and Python SDK (Debian)
+- name: "Install official Docker Engine and Docker Compose Plugin packages"
   ansible.builtin.apt:
-    name:
-      - docker-ce
-      - docker-ce-cli
-      - containerd.io
-      - docker-buildx-plugin
-      - docker-compose-plugin
-      - python3-docker
+    name: "{{ docker_packages }}"
     state: present
     update_cache: true
-  when: ansible_os_family == 'Debian'
 
-- name: Install Docker Engine (RedHat / Amazon Linux)
-  ansible.builtin.dnf:
-    name:
-      - docker
-      - python3-pip
-    state: present
-  when: ansible_os_family == 'RedHat'
-
-- name: Ensure Python Docker SDK is installed (RedHat / Amazon Linux)
-  ansible.builtin.command:
-    cmd: python3 -m pip install --upgrade docker
-  register: pip_docker_install
-  changed_when: "'Successfully installed' in pip_docker_install.stdout"
-  when: ansible_os_family == 'RedHat'
-
-- name: Configure Docker daemon JSON with log rotation
-  ansible.builtin.copy:
-    dest: /etc/docker/daemon.json
-    content: |
-      {
-        "log-driver": "json-file",
-        "log-opts": {
-          "max-size": "50m",
-          "max-file": "3"
-        }
-      }
-    mode: "0644"
-  notify: Restart Docker service
-
-- name: Ensure Docker service is enabled and started
+- name: "Ensure Docker service is enabled and started"
   ansible.builtin.systemd:
     name: docker
     state: started
     enabled: true
 
-- name: Ensure designated user belongs to docker group
+- name: "Add designated users to docker group"
   ansible.builtin.user:
-    name: "{{ docker_user }}"
+    name: "{{ item }}"
     groups: docker
     append: true
-  failed_when: false
-
-- name: Apply pending Docker daemon changes
-  ansible.builtin.meta: flush_handlers
-
-- name: Verify Docker installation
-  ansible.builtin.command:
-    cmd: docker --version
-  register: docker_version_check
-  changed_when: false
-
-- name: Verify Docker Compose plugin installation
-  ansible.builtin.command:
-    cmd: docker compose version
-  register: compose_version_check
-  changed_when: false
+  loop: "{{ docker_users }}"

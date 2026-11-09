@@ -1,38 +1,32 @@
 ---
-- name: Determine current SSH port
-  ansible.builtin.set_fact:
-    active_ssh_port: "{{ ansible_port | default(22) }}"
-  when: ansible_os_family == 'Debian'
-
-- name: Set UFW default policies (deny incoming, allow outgoing)
+- name: "Set default policy to deny incoming traffic"
   community.general.ufw:
-    direction: "{{ item.direction }}"
-    policy: "{{ item.policy }}"
-  loop:
-    - { direction: "incoming", policy: "deny" }
-    - { direction: "outgoing", policy: "allow" }
-  when: ansible_os_family == 'Debian'
+    direction: incoming
+    default: deny
 
-- name: Ensure SSH access is explicitly allowed BEFORE enabling firewall (Anti-Lockout)
+- name: "Set default policy to allow outgoing traffic"
+  community.general.ufw:
+    direction: outgoing
+    default: allow
+
+- name: "Allow SSH traffic with rate limiting"
+  community.general.ufw:
+    rule: limit
+    port: "{{ ssh_port | default(22) }}"
+    proto: tcp
+
+- name: "Allow HTTP traffic for Traefik"
   community.general.ufw:
     rule: allow
-    port: "{{ active_ssh_port }}"
+    port: 80
     proto: tcp
-    comment: "Management SSH Access"
-  when: ansible_os_family == 'Debian'
 
-- name: Allow HTTP and HTTPS traffic for Traefik
+- name: "Allow HTTPS traffic for Traefik"
   community.general.ufw:
     rule: allow
-    port: "{{ item }}"
+    port: 443
     proto: tcp
-    comment: "Public Web Traffic"
-  loop:
-    - "80"
-    - "443"
-  when: ansible_os_family == 'Debian'
 
-- name: Enable UFW service
+- name: "Enable UFW service"
   community.general.ufw:
     state: enabled
-  when: ansible_os_family == 'Debian'
