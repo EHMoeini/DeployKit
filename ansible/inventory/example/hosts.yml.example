@@ -1,0 +1,14 @@
+all:
+  children:
+    servers:
+      hosts:
+        example-server:
+          ansible_host: YOUR_SERVER_IP
+          ansible_user: YOUR_SSH_USER
+          ansible_port: 22
+          # ansible_ssh_private_key_file: ~/.ssh/id_ed25519
+          # ansible_password: "YOUR_SSH_PASSWORD"
+
+  vars:
+    # Traefik & ACME SSL Configuration
+    acme_email: "admin@example.com"

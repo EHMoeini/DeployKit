@@ -1,9 +1,0 @@
----
-- name: Deploy Application with Immutable Image Tag
-  hosts: servers
-  become: true
-  vars:
-    app_image_tag: "{{ image_tag | default('latest') }}"
-  roles:
-    - application
-    - watchtower

@@ -1,0 +1,2 @@
+---
+docker_user: "{{ deploy_user | default(ansible_user | default('deployer')) }}"

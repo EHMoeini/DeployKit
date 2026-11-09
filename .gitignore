@@ -2,28 +2,26 @@
 .env
 .env.*
 !.env.example
-*.pem
-*.key
+
+# Ansible Inventory & Host Secrets
+ansible/inventory/production/
+ansible/inventory/**/hosts.yml
+!ansible/inventory/**/hosts.yml.example
 ansible/vault/vault_pass.txt
 ansible/vault/*.secret
 
-# Node.js
-node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-.pnpm-debug.log*
+*.pem
+*.key
+*.p12
+*.pfx
 
-# Build outputs
-frontend/dist/
-backend/dist/
+# Node.js & Builds
+node_modules/
 dist/
 build/
 
 # Runtime Data & Storage
 /srv/
-postgres/data/
-uploads/
 backups/
 *.dump
 *.tmp

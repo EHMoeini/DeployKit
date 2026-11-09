@@ -32,14 +32,6 @@
     - "443"
   when: ansible_os_family == 'Debian'
 
-- name: Prevent Docker bypass - Ensure PostgreSQL port is NOT publicly exposed
-  community.general.ufw:
-    rule: deny
-    port: "5432"
-    proto: tcp
-    comment: "Block Public Postgres"
-  when: ansible_os_family == 'Debian'
-
 - name: Enable UFW service
   community.general.ufw:
     state: enabled

@@ -39,15 +39,15 @@
     state: present
   when: ansible_os_family == 'RedHat'
 
-- name: Ensure deployer group exists
+- name: Ensure deploy group exists
   ansible.builtin.group:
-    name: deployer
+    name: "{{ deploy_group }}"
     state: present
 
-- name: Ensure deployer user exists
+- name: Ensure deploy user exists
   ansible.builtin.user:
-    name: deployer
-    group: deployer
+    name: "{{ deploy_user }}"
+    group: "{{ deploy_group }}"
     groups:
       - "{{ 'sudo' if ansible_os_family == 'Debian' else 'wheel' }}"
     append: true

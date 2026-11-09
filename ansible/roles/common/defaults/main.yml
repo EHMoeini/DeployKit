@@ -1,0 +1,3 @@
+---
+deploy_user: "{{ custom_user | default('deployer') }}"
+deploy_group: "{{ custom_group | default('deployer') }}"

@@ -14,7 +14,7 @@
         )
       changed_when: false
 
-- name: Infrastructure Provisioning and Base Hardening
+- name: DeployKit Infrastructure Provisioning and Base Hardening
   hosts: servers
   gather_facts: true
   become: true
@@ -22,17 +22,5 @@
     - common
     - security
     - firewall
-    - storage
     - docker
     - traefik
-    - backup
-
-- name: Deploy Application Services
-  hosts: servers
-  gather_facts: true
-  become: true
-  vars:
-    app_image_tag: "{{ image_tag | default('latest') }}"
-  roles:
-    - application
-    - watchtower

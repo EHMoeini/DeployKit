@@ -1,71 +1,73 @@
 ---
-- name: Create Traefik ACME directory
+- name: Create Traefik directory
   ansible.builtin.file:
-    path: /srv/traefik/acme
+    path: "{{ traefik_dir }}"
     state: directory
-    owner: deployer
-    group: deployer
+    owner: "{{ traefik_user }}"
+    group: "{{ traefik_group }}"
     mode: "0755"
 
-# A previous bind mount may have left a directory at the acme.json path.
+- name: Create Traefik ACME directory
+  ansible.builtin.file:
+    path: "{{ traefik_acme_dir }}"
+    state: directory
+    owner: "{{ traefik_user }}"
+    group: "{{ traefik_group }}"
+    mode: "0755"
+
 - name: Inspect acme.json path
   ansible.builtin.stat:
-    path: /srv/traefik/acme/acme.json
+    path: "{{ traefik_acme_file }}"
   register: acme_file_stat
 
-- name: Remove stale acme.json directory left by an older deployment
+- name: Remove stale acme.json directory left by older deployment
   ansible.builtin.file:
-    path: /srv/traefik/acme/acme.json
+    path: "{{ traefik_acme_file }}"
     state: absent
   when: acme_file_stat.stat.isdir | default(false)
 
-- name: Create acme.json with strict 600 permissions
+- name: Create acme.json with strict 0600 permissions
   ansible.builtin.file:
-    path: /srv/traefik/acme/acme.json
+    path: "{{ traefik_acme_file }}"
     state: touch
-    owner: deployer
-    group: deployer
+    owner: "{{ traefik_user }}"
+    group: "{{ traefik_group }}"
     mode: "0600"
     modification_time: preserve
     access_time: preserve
 
-- name: Create Traefik stack directory
-  ansible.builtin.file:
-    path: "/srv/{{ project_name }}/traefik"
-    state: directory
-    owner: deployer
-    group: deployer
-    mode: "0755"
+- name: Check if Traefik public docker network exists
+  ansible.builtin.command:
+    cmd: "docker network inspect {{ traefik_network }}"
+  register: traefik_net_check
+  failed_when: false
+  changed_when: false
 
-- name: Copy Traefik Docker Swarm stack
+- name: Create Traefik public docker network
+  ansible.builtin.command:
+    cmd: "docker network create {{ traefik_network }}"
+  when: traefik_net_check.rc != 0
+
+- name: Copy Traefik docker-compose file
   ansible.builtin.copy:
     src: ../../../traefik/docker-compose.yml
-    dest: "/srv/{{ project_name }}/traefik/docker-compose.yml"
-    owner: deployer
-    group: deployer
+    dest: "{{ traefik_dir }}/docker-compose.yml"
+    owner: "{{ traefik_user }}"
+    group: "{{ traefik_group }}"
     mode: "0644"
 
-- name: Deploy Traefik stack
+- name: Deploy Traefik via Docker Compose
   ansible.builtin.command:
-    argv:
-      - docker
-      - stack
-      - deploy
-      - --with-registry-auth
-      - --compose-file
-      - "/srv/{{ project_name }}/traefik/docker-compose.yml"
-      - traefik
+    cmd: "docker compose -f {{ traefik_dir }}/docker-compose.yml up -d --remove-orphans"
   environment:
-    ACME_EMAIL: "{{ acme_email | default('admin@' ~ domain) }}"
-  register: traefik_stack_deploy
-  changed_when: "'Creating' in traefik_stack_deploy.stdout or 'Updating' in traefik_stack_deploy.stdout"
+    ACME_EMAIL: "{{ traefik_acme_email }}"
+    TRAEFIK_NETWORK: "{{ traefik_network }}"
+    TRAEFIK_ACME_FILE: "{{ traefik_acme_file }}"
+  register: traefik_compose_up
+  changed_when: "'Started' in traefik_compose_up.stdout or 'Running' in traefik_compose_up.stdout or 'Created' in traefik_compose_up.stdout"
   when: traefik_state | default('present') == 'present'
 
-- name: Remove Traefik stack when requested
+- name: Remove Traefik via Docker Compose when requested
   ansible.builtin.command:
-    argv:
-      - docker
-      - stack
-      - rm
-      - traefik
+    cmd: "docker compose -f {{ traefik_dir }}/docker-compose.yml down"
   when: traefik_state | default('present') == 'absent'

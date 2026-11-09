@@ -74,111 +74,24 @@
     state: started
     enabled: true
 
-- name: Ensure deployer user belongs to docker group
+- name: Ensure designated user belongs to docker group
   ansible.builtin.user:
-    name: deployer
+    name: "{{ docker_user }}"
     groups: docker
     append: true
   failed_when: false
 
-# Apply a pending daemon.json restart before Swarm services are deployed.
 - name: Apply pending Docker daemon changes
   ansible.builtin.meta: flush_handlers
 
-- name: Check Docker Swarm state
+- name: Verify Docker installation
   ansible.builtin.command:
-    argv:
-      - docker
-      - info
-      - --format
-      - "{% raw %}{{.Swarm.LocalNodeState}}{% endraw %}"
-  register: docker_swarm_state
+    cmd: docker --version
+  register: docker_version_check
   changed_when: false
 
-- name: Initialize Docker Swarm
+- name: Verify Docker Compose plugin installation
   ansible.builtin.command:
-    argv:
-      - docker
-      - swarm
-      - init
-      - --advertise-addr
-      - "{{ ansible_default_ipv4.address | default(ansible_host) }}"
-  when: docker_swarm_state.stdout != 'active'
-
-# Transition from the previous Compose deployment to Swarm. Bind-mounted data
-# directories are untouched; only the old containers and bridge networks go away.
-- name: Remove legacy Compose containers replaced by Swarm services
-  ansible.builtin.command:
-    argv:
-      - docker
-      - rm
-      - -f
-      - "{{ item }}"
-  loop:
-    - traefik
-    - "{{ project_name }}_postgres"
-    - "{{ project_name }}_backend"
-    - "{{ project_name }}_frontend"
-    - "{{ project_name }}_migrate"
-  register: legacy_container_removal
-  failed_when: false
+    cmd: docker compose version
+  register: compose_version_check
   changed_when: false
-
-- name: Inspect existing traefik-public network driver
-  ansible.builtin.command:
-    argv:
-      - docker
-      - network
-      - inspect
-      - -f
-      - "{% raw %}{{.Driver}}{% endraw %}"
-      - traefik-public
-  register: traefik_public_driver
-  changed_when: false
-  failed_when: false
-
-- name: Remove legacy bridge traefik-public network
-  ansible.builtin.command:
-    argv:
-      - docker
-      - network
-      - rm
-      - traefik-public
-  when: traefik_public_driver.stdout | default('') == 'bridge'
-
-- name: Inspect existing app-internal network driver
-  ansible.builtin.command:
-    argv:
-      - docker
-      - network
-      - inspect
-      - -f
-      - "{% raw %}{{.Driver}}{% endraw %}"
-      - app-internal
-  register: app_internal_driver
-  changed_when: false
-  failed_when: false
-
-- name: Remove legacy bridge app-internal network
-  ansible.builtin.command:
-    argv:
-      - docker
-      - network
-      - rm
-      - app-internal
-  when: app_internal_driver.stdout | default('') == 'bridge'
-
-- name: Ensure application overlay network exists
-  community.docker.docker_network:
-    name: app-internal
-    driver: overlay
-    internal: true
-    attachable: true
-    state: present
-
-- name: Ensure Traefik overlay network exists
-  community.docker.docker_network:
-    name: traefik-public
-    driver: overlay
-    attachable: true
-    state: present
