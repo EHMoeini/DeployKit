@@ -1,12 +1,12 @@
 # DeployKit
 
-استقرار خودکار پروژه، روی سرور شخصی **Ubuntu Server 22.04 / 24.04 LTS** با کمک هوش مصنوعی، Ansible، Docker و Traefik (همراه با گواهی SSL خودکار Let's Encrypt).
+استقرار خودکار پروژه، روی سرور شخصی **Ubuntu 22.04 / 24.04 / 26.04 LTS** یا **Debian 12 / 13** با کمک هوش مصنوعی، Ansible، Docker و Traefik (همراه با گواهی SSL خودکار Let's Encrypt).
 
 ---
 
 ## پیش‌نیازها
 
-- یک سرور خام **Ubuntu 22.04 LTS** یا **Ubuntu 24.04 LTS** با دسترسی `root` یا کاربر SSH.
+- یک سرور خام **Ubuntu 22.04 / 24.04 / 26.04 LTS** یا **Debian 12 / 13** با دسترسی `root` یا کاربر SSH.
 - نصب بودن `ansible` و `ssh` روی سیستم شما (در ویندوز داخل WSL).
 
 ---

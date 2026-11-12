@@ -5,18 +5,18 @@
     state: directory
     mode: '0755'
 
-- name: "Download official Docker GPG key for Ubuntu"
+- name: "Download official Docker GPG key"
   ansible.builtin.get_url:
-    url: "https://download.docker.com/linux/ubuntu/gpg"
+    url: "https://download.docker.com/linux/{{ ansible_distribution | lower }}/gpg"
     dest: "{{ docker_apt_keyring_path }}"
     mode: '0644'
 
-- name: "Add official Docker APT repository for Ubuntu"
+- name: "Add official Docker APT repository"
   ansible.builtin.apt_repository:
     repo: >-
       deb [arch={{ ansible_architecture | replace('x86_64', 'amd64') | replace('aarch64', 'arm64') }}
       signed-by={{ docker_apt_keyring_path }}]
-      {{ docker_apt_repo_url }}
+      https://download.docker.com/linux/{{ ansible_distribution | lower }}
       {{ ansible_distribution_release }} stable
     state: present
     filename: docker

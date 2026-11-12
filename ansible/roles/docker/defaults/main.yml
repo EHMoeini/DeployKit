@@ -1,7 +1,7 @@
 ---
 docker_apt_keyring_dir: "/etc/apt/keyrings"
 docker_apt_keyring_path: "/etc/apt/keyrings/docker.asc"
-docker_apt_repo_url: "https://download.docker.com/linux/ubuntu"
+docker_apt_repo_url: "https://download.docker.com/linux/{{ ansible_distribution | lower }}"
 docker_packages:
   - docker-ce
   - docker-ce-cli
