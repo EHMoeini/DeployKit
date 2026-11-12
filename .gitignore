@@ -4,7 +4,9 @@
 !.env.example
 
 # Ansible Inventory & Host Secrets
-ansible/inventory/production/
+ansible/inventory/production/**
+!ansible/inventory/production/**/
+!ansible/inventory/production/**/*.example
 ansible/inventory/**/hosts.yml
 !ansible/inventory/**/hosts.yml.example
 ansible/vault/vault_pass.txt

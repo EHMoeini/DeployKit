@@ -1,6 +1,4 @@
 ---
-traefik_data_dir: "/opt/deploykit/traefik"
-traefik_acme_file: "{{ traefik_data_dir }}/acme.json"
-traefik_network_name: "traefik-public"
-traefik_acme_email: "{{ acme_email | default('admin@example.com') }}"
-traefik_state: "present"
+traefik_dir: "/opt/traefik"
+traefik_network: "traefik_proxy"
+acme_email: "admin@example.com"

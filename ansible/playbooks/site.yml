@@ -25,7 +25,14 @@
 
   roles:
     - role: common
+      tags: ["setup", "common"]
     - role: security
+      tags: ["setup", "security"]
     - role: firewall
+      tags: ["setup", "firewall"]
     - role: docker
+      tags: ["setup", "docker"]
     - role: traefik
+      tags: ["setup", "traefik"]
+    - role: app
+      tags: ["deploy", "app"]

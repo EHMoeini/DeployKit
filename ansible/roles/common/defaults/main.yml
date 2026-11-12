@@ -22,8 +22,9 @@ deploykit_base_packages:
   - jq
 
 # Default server timezone
-deploykit_timezone: "UTC"
+timezone: "UTC"
+deploykit_timezone: "{{ timezone | default('UTC') }}"
 
 # Deployment user and primary group
-deploy_user: "{{ custom_user | default('ubuntu') }}"
-deploy_group: "{{ custom_group | default('ubuntu') }}"
+deploy_user: "{{ custom_user | default(ansible_user | default('ubuntu')) }}"
+deploy_group: "{{ custom_group | default(deploy_user) }}"

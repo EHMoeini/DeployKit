@@ -1,15 +1,8 @@
 ---
 all:
-  children:
-    deploykit_servers:
-      hosts:
-        server1:
-          ansible_host: 203.0.113.10
-          ansible_user: ubuntu
-          ansible_port: 22
-          # Default Python interpreter on Ubuntu 22.04/24.04
-          ansible_python_interpreter: /usr/bin/python3
-
-  vars:
-    # Email for Let's Encrypt certificate expiry notifications
-    acme_email: "admin@example.com"
+  hosts:
+    production_server:
+      ansible_host: "203.0.113.10"
+      ansible_port: 22
+      ansible_user: "deploy"
+      ansible_ssh_private_key_file: "~/.ssh/id_ed25519"

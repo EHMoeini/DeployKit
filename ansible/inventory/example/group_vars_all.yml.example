@@ -1,0 +1,71 @@
+---
+# ==========================================
+# 1. Server & Security Settings
+# ==========================================
+timezone: "UTC"
+ssh_port: 22
+deploy_user: "deploy"
+
+# ==========================================
+# 2. Traefik & SSL/TLS Settings
+# ==========================================
+acme_email: "admin@example.com"
+traefik_network: "traefik_proxy"
+traefik_dir: "/opt/traefik"
+
+# ==========================================
+# 3. Container Registry Auth (GHCR / Docker Hub)
+# Set registry_auth_enabled to true for private images
+# ==========================================
+registry_auth_enabled: false
+registry_url: "ghcr.io"
+registry_username: ""
+registry_token: ""
+
+# ==========================================
+# 4. Application Stack
+# ==========================================
+app_name: "my_web_app"
+app_dir: "/opt/app"
+
+# Persistent named volumes (e.g. databases, uploads)
+app_named_volumes:
+  - "postgres_data"
+  # - "redis_data"
+
+# Application services (frontend, backend, database, etc.)
+app_services:
+  - name: "frontend"
+    image: "ghcr.io/username/frontend:latest"
+    expose_public: true
+    domain: "example.com"
+    port: 3000
+    env:
+      NODE_ENV: "production"
+      NEXT_PUBLIC_API_URL: "https://api.example.com"
+    volumes: []
+    depends_on:
+      - "backend"
+
+  - name: "backend"
+    image: "ghcr.io/username/backend:latest"
+    expose_public: true
+    domain: "api.example.com"
+    port: 8000
+    env:
+      DATABASE_URL: "postgresql://postgres:secretpassword@db:5432/appdb"
+      PORT: "8000"
+    volumes: []
+    depends_on:
+      - "db"
+
+  - name: "db"
+    image: "postgres:16-alpine"
+    expose_public: false
+    env:
+      POSTGRES_USER: "postgres"
+      POSTGRES_PASSWORD: "secretpassword"
+      POSTGRES_DB: "appdb"
+    volumes:
+      - "postgres_data:/var/lib/postgresql/data"
+    depends_on: []

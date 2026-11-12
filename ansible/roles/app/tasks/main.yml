@@ -1,0 +1,35 @@
+---
+- name: "Ensure application directory exists"
+  ansible.builtin.file:
+    path: "{{ app_dir }}"
+    state: directory
+    owner: "{{ deploy_user | default(ansible_user) }}"
+    group: "{{ deploy_user | default(ansible_user) }}"
+    mode: "0750"
+
+- name: "Log in to Container Registry (GHCR / DockerHub) if private"
+  community.docker.docker_login:
+    registry_url: "{{ registry_url }}"
+    username: "{{ registry_username }}"
+    password: "{{ registry_token }}"
+    reauthorize: true
+  when:
+    - registry_auth_enabled | bool
+    - registry_username | length > 0
+    - registry_token | length > 0
+
+- name: "Render application docker-compose.yml"
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ app_dir }}/docker-compose.yml"
+    owner: "{{ deploy_user | default(ansible_user) }}"
+    group: "{{ deploy_user | default(ansible_user) }}"
+    mode: "0640"
+
+- name: "Pull and deploy application services"
+  community.docker.docker_compose_v2:
+    project_src: "{{ app_dir }}"
+    pull: always
+    remove_orphans: true
+    state: present
+  when: app_services | length > 0
