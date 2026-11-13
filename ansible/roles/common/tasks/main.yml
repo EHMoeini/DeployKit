@@ -13,8 +13,47 @@
   ansible.builtin.timezone:
     name: "{{ deploykit_timezone }}"
 
-- name: "Enable and start time synchronization service (systemd-timesyncd)"
-  ansible.builtin.systemd:
+- name: "Gather service facts"
+  ansible.builtin.service_facts:
+
+- name: "Install systemd-timesyncd fallback if no time daemon exists"
+  ansible.builtin.apt:
     name: systemd-timesyncd
+    state: present
+  when:
+    - "'chrony.service' not in ansible_facts.services"
+    - "'systemd-timesyncd.service' not in ansible_facts.services"
+
+- name: "Enable and start time synchronization service"
+  ansible.builtin.systemd:
+    name: "{{ 'chrony' if 'chrony.service' in ansible_facts.services else 'systemd-timesyncd' }}"
     state: started
     enabled: true
+
+- name: "Ensure chrony sources directory exists"
+  ansible.builtin.file:
+    path: /etc/chrony/sources.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: "'chrony.service' in ansible_facts.services"
+
+- name: "Configure fallback NTP source for chrony (UDP 123)"
+  ansible.builtin.copy:
+    dest: /etc/chrony/sources.d/fallback-ntp.sources
+    content: |
+      pool ntp.ubuntu.com iburst
+    owner: root
+    group: root
+    mode: "0644"
+  register: deploykit_chrony_fallback
+  when: "'chrony.service' in ansible_facts.services"
+
+- name: "Reload chrony service"
+  ansible.builtin.systemd:
+    name: chrony
+    state: restarted
+  when:
+    - "'chrony.service' in ansible_facts.services"
+    - deploykit_chrony_fallback.changed
