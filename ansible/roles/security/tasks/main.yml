@@ -1,5 +1,5 @@
 ---
-- name: "Configure hardened SSH daemon parameters on Ubuntu"
+- name: "Configure hardened SSH daemon parameters"
   ansible.builtin.lineinfile:
     path: /etc/ssh/sshd_config
     regexp: "{{ item.regexp }}"
@@ -12,3 +12,23 @@
     - { regexp: '^#?X11Forwarding', line: 'X11Forwarding no' }
     - { regexp: '^#?MaxAuthTries', line: 'MaxAuthTries 4' }
   notify: Restart sshd
+
+- name: "Ensure SSH service is enabled and running"
+  ansible.builtin.systemd:
+    name: "{{ 'ssh' if ansible_os_family == 'Debian' else 'sshd' }}"
+    state: started
+    enabled: true
+
+- name: "Install and configure fail2ban on Debian-family distributions"
+  when: ansible_os_family == "Debian"
+  block:
+    - name: "Install fail2ban"
+      ansible.builtin.apt:
+        name: fail2ban
+        state: present
+
+    - name: "Ensure fail2ban service is enabled and started"
+      ansible.builtin.systemd:
+        name: fail2ban
+        state: started
+        enabled: true

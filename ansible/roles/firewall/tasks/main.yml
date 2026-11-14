@@ -1,32 +1,61 @@
 ---
-- name: "Set default policy to deny incoming traffic"
-  community.general.ufw:
-    direction: incoming
-    default: deny
+- name: "Configure UFW firewall on Debian-family distributions"
+  when: ansible_os_family == "Debian"
+  block:
+    - name: "Set default policy to deny incoming traffic"
+      community.general.ufw:
+        direction: incoming
+        default: deny
 
-- name: "Set default policy to allow outgoing traffic"
-  community.general.ufw:
-    direction: outgoing
-    default: allow
+    - name: "Set default policy to allow outgoing traffic"
+      community.general.ufw:
+        direction: outgoing
+        default: allow
 
-- name: "Allow SSH traffic with rate limiting"
-  community.general.ufw:
-    rule: limit
-    port: "{{ ssh_port | default(22) }}"
-    proto: tcp
+    - name: "Allow SSH traffic with rate limiting"
+      community.general.ufw:
+        rule: limit
+        port: "{{ ssh_port | default(22) }}"
+        proto: tcp
 
-- name: "Allow HTTP traffic for Traefik"
-  community.general.ufw:
-    rule: allow
-    port: 80
-    proto: tcp
+    - name: "Allow HTTP traffic for Traefik"
+      community.general.ufw:
+        rule: allow
+        port: 80
+        proto: tcp
 
-- name: "Allow HTTPS traffic for Traefik"
-  community.general.ufw:
-    rule: allow
-    port: 443
-    proto: tcp
+    - name: "Allow HTTPS traffic for Traefik"
+      community.general.ufw:
+        rule: allow
+        port: 443
+        proto: tcp
 
-- name: "Enable UFW service"
-  community.general.ufw:
-    state: enabled
+    - name: "Enable UFW service"
+      community.general.ufw:
+        state: enabled
+
+- name: "Configure firewalld on RedHat-family distributions"
+  when: ansible_os_family == "RedHat"
+  block:
+    - name: "Gather service facts"
+      ansible.builtin.service_facts:
+
+    - name: "Configure firewalld ports"
+      when: "'firewalld.service' in ansible_facts.services"
+      block:
+        - name: "Ensure firewalld service is enabled and started"
+          ansible.builtin.systemd:
+            name: firewalld
+            state: started
+            enabled: true
+
+        - name: "Allow ports in firewalld"
+          ansible.posix.firewalld:
+            port: "{{ item }}/tcp"
+            permanent: true
+            immediate: true
+            state: enabled
+          loop:
+            - "{{ ssh_port | default(22) }}"
+            - 80
+            - 443

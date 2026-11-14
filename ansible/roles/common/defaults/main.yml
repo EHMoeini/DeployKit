@@ -1,14 +1,5 @@
 ---
-# Supported operating system distribution and versions
-deploykit_supported_os: "Ubuntu"
-deploykit_supported_versions:
-  - "22.04"
-  - "24.04"
-deploykit_supported_codenames:
-  - "jammy"
-  - "noble"
-
-# Essential base packages for Ubuntu
+# Default base packages fallback (overridden by vars/Debian.yml and vars/RedHat.yml)
 deploykit_base_packages:
   - ca-certificates
   - curl

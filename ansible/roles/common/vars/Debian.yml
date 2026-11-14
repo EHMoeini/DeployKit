@@ -1,0 +1,11 @@
+---
+common_packages:
+  - curl
+  - git
+  - ca-certificates
+  - gnupg
+  - lsb-release
+  - python3-pip
+  - python3-docker
+
+deploykit_base_packages: "{{ common_packages }}"

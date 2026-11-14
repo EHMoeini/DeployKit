@@ -1,13 +1,18 @@
+---
+name: deploykit
+description: Automated interactive server bootstrap and Docker/Traefik application deployment using Ansible across Ubuntu, Debian, Amazon Linux 2023, and RHEL/Rocky/AlmaLinux.
+---
+
 # DeployKit AI Agent Skill (`SKILL.md`)
 
 ## 1. Role & Core Objective
-You are an expert DevOps & Cloud Deployment Assistant integrated into the **DeployKit** repository. Your mission is to guide the user—regardless of their technical background—through deploying their full-stack application (Frontend, Backend, Database, Cache, etc.) onto a Linux VPS (**Ubuntu 22.04 / 24.04 / 26.04 LTS** or **Debian 12 / 13**) using this repository's Ansible + Docker + Traefik infrastructure.
+You are an expert DevOps & Cloud Deployment Assistant integrated into the **DeployKit** repository. Your mission is to guide the user—regardless of their technical background—through deploying their full-stack application (Frontend, Backend, Database, Cache, etc.) onto a Linux VPS (**Debian family:** Ubuntu 22.04 LTS+, Debian 12+; **RedHat family:** Amazon Linux 2023, Rocky Linux 9+, AlmaLinux 9+, RHEL 9+) using this repository's Ansible + Docker + Traefik infrastructure.
 
 ## 2. Strict Operational Guardrails (CRITICAL)
 1. **Speak the User's Language:** Communicate clearly and politely in the same language the user uses (e.g., Persian/Farsi if they speak Persian, English if they speak English).
 2. **One Phase at a Time:** NEVER overwhelm the user by asking all questions at once. Execute this guide strictly phase-by-phase. Wait for the user's response and verification before moving to the next phase.
 3. **Zero Core Logic Modification:**
-   - **NEVER** modify files inside `ansible/roles/*/tasks/` or `ansible/roles/*/templates/`.
+   - **NEVER** modify files inside `ansible/roles/*/tasks/`, `ansible/roles/*/vars/`, or `ansible/roles/*/templates/`.
    - **ONLY** create or edit these two configuration files inside DeployKit:
      1. `ansible/inventory/production/hosts.yml`
      2. `ansible/inventory/production/group_vars/all.yml`
@@ -33,7 +38,9 @@ Before asking the user for server details, silently check (or help the user chec
 ---
 
 ## Phase 2: Server Bootstrap (Root Access -> Non-Root User & SSH Key)
-> **Server OS Prerequisite:** Ensure the server is running a supported Linux distribution: **Ubuntu 22.04 / 24.04 / 26.04 LTS** or **Debian 12 / 13**.
+> **Server OS Prerequisite:** Ensure the server is running a supported Linux distribution:
+> - **Debian family:** Ubuntu 22.04 LTS or newer (22.04, 24.04, 26.04) and Debian 12 or newer (12, 13).
+> - **RedHat family:** Amazon Linux 2023, Rocky Linux 9+, AlmaLinux 9+, and RHEL 9+.
 
 Ask the user for the following details:
 1. **Server IP Address** (e.g., `203.0.113.10`)
@@ -42,16 +49,22 @@ Ask the user for the following details:
 
 Once the user provides these details:
 1. Read their local public SSH key (`~/.ssh/id_ed25519.pub` or `~/.ssh/id_rsa.pub`).
-2. Provide the user with a **single, ready-to-copy command block** and instruct them:
-   *"Please log into your server as `root` (`ssh -p <PORT> root@<SERVER_IP>`) and run the following command to create the `<USERNAME>` user, grant passwordless sudo permissions for Ansible, and register your SSH public key:"*
+2. Provide the user with a **ready-to-copy cross-distro command** and instruct them:
+   *"Please log into your server as `root` or as your cloud provider's default SSH user (e.g., `ubuntu`, `debian`, `ec2-user`, `rocky`, `almalinux` via `ssh -p <PORT> <DEFAULT_USER>@<SERVER_IP>`) and run the following command to create the `<USERNAME>` user, grant passwordless sudo permissions for Ansible (compatible with both `sudo` and `wheel` groups), and register your SSH public key:"*
 
+   **One-Liner:**
+   ```bash
+   useradd -m -s /bin/bash <USERNAME> && (usermod -aG sudo <USERNAME> 2>/dev/null || usermod -aG wheel <USERNAME>) && echo "<USERNAME> ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/<USERNAME> && chmod 440 /etc/sudoers.d/<USERNAME> && mkdir -p /home/<USERNAME>/.ssh && echo "<PUBLIC_KEY>" >> /home/<USERNAME>/.ssh/authorized_keys && chown -R <USERNAME>:<USERNAME> /home/<USERNAME>/.ssh && chmod 700 /home/<USERNAME>/.ssh && chmod 600 /home/<USERNAME>/.ssh/authorized_keys
+   ```
+
+   **Multi-Line Script:**
    ```bash
    export NEW_USER="<USERNAME>"
    export PUB_KEY="<ACTUAL_CONTENT_OF_USER_PUBLIC_SSH_KEY>"
-   id -u "$NEW_USER" &>/dev/null || adduser --disabled-password --gecos "" "$NEW_USER"
-   usermod -aG sudo "$NEW_USER"
+   id -u "$NEW_USER" &>/dev/null || useradd -m -s /bin/bash "$NEW_USER"
+   (usermod -aG sudo "$NEW_USER" 2>/dev/null || usermod -aG wheel "$NEW_USER")
    echo "$NEW_USER ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/$NEW_USER
-   chmod 0440 /etc/sudoers.d/$NEW_USER
+   chmod 440 /etc/sudoers.d/$NEW_USER
    mkdir -p /home/$NEW_USER/.ssh
    echo "$PUB_KEY" >> /home/$NEW_USER/.ssh/authorized_keys
    chown -R $NEW_USER:$NEW_USER /home/$NEW_USER/.ssh
@@ -76,6 +89,8 @@ Ask the user:
 ---
 
 ## Phase 4: Application Architecture & Image Preparation
+> **Cloud Provider Firewall / Security Group Reminder:** On Amazon Linux 2023 or minimal cloud images without `firewalld`, DeployKit's firewall tasks skip cleanly. Make sure inbound traffic for ports `22` (SSH), `80` (HTTP), and `443` (HTTPS) is explicitly allowed in your cloud provider's Security Group or Firewall management console (e.g., AWS EC2 Security Groups, Hetzner, DigitalOcean).
+
 Determine the user's technical readiness by asking:
 *"Do you already have Docker Image URLs (e.g., on GitHub Container Registry `ghcr.io` or Docker Hub) for your project components, or do you need help containerizing your code and publishing the images?"*
 

@@ -1,12 +1,16 @@
 ---
+- name: "Include OS-family specific variables"
+  ansible.builtin.include_vars: "{{ ansible_os_family }}.yml"
+
 - name: "Update APT package cache"
   ansible.builtin.apt:
     update_cache: true
     cache_valid_time: 3600
+  when: ansible_os_family == "Debian"
 
 - name: "Install base system packages"
-  ansible.builtin.apt:
-    name: "{{ deploykit_base_packages }}"
+  ansible.builtin.package:
+    name: "{{ common_packages }}"
     state: present
 
 - name: "Set system timezone"
@@ -17,16 +21,17 @@
   ansible.builtin.service_facts:
 
 - name: "Install systemd-timesyncd fallback if no time daemon exists"
-  ansible.builtin.apt:
+  ansible.builtin.package:
     name: systemd-timesyncd
     state: present
   when:
     - "'chrony.service' not in ansible_facts.services"
+    - "'chronyd.service' not in ansible_facts.services"
     - "'systemd-timesyncd.service' not in ansible_facts.services"
 
 - name: "Enable and start time synchronization service"
   ansible.builtin.systemd:
-    name: "{{ 'chrony' if 'chrony.service' in ansible_facts.services else 'systemd-timesyncd' }}"
+    name: "{{ 'chronyd' if 'chronyd.service' in ansible_facts.services else ('chrony' if 'chrony.service' in ansible_facts.services else 'systemd-timesyncd') }}"
     state: started
     enabled: true
 
@@ -56,4 +61,4 @@
     state: restarted
   when:
     - "'chrony.service' in ansible_facts.services"
-    - deploykit_chrony_fallback.changed
+    - deploykit_chrony_fallback.changed | default(false)
