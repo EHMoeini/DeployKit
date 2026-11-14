@@ -147,11 +147,11 @@ Show a brief summary of the configuration (masking sensitive passwords/tokens) t
 1. **Run the Full Playbook:**
    Execute the deployment from the root of the DeployKit repository:
    ```bash
-   ansible-playbook -i ansible/inventory/production/hosts.yml ansible/playbooks/site.yml
+   ANSIBLE_CONFIG=ansible/ansible.cfg ansible-playbook -i ansible/inventory/production/hosts.yml ansible/playbooks/site.yml
    ```
    *(Note: If the server was already provisioned previously and the user only wants to update their application containers or environment variables, run with `--tags app` for fast deployment:)*
    ```bash
-   ansible-playbook -i ansible/inventory/production/hosts.yml ansible/playbooks/site.yml --tags app
+   ANSIBLE_CONFIG=ansible/ansible.cfg ansible-playbook -i ansible/inventory/production/hosts.yml ansible/playbooks/site.yml --tags app
    ```
 
 2. **Verify Deployment Health:**

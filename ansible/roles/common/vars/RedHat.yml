@@ -1,10 +1,10 @@
 ---
 common_packages:
-  # On Amazon Linux 2023, curl-minimal is pre-installed; using curl-minimal avoids DNF conflicts with curl
+  # On Amazon Linux 2023, minimal variants are pre-installed; using them avoids DNF conflicts
   - "{{ 'curl-minimal' if ansible_distribution == 'Amazon' else 'curl' }}"
   - git
   - ca-certificates
-  - gnupg2
+  - "{{ 'gnupg2-minimal' if ansible_distribution == 'Amazon' else 'gnupg2' }}"
   - python3-pip
 
 deploykit_base_packages: "{{ common_packages }}"

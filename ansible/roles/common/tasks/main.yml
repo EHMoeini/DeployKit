@@ -20,18 +20,30 @@
 - name: "Gather service facts"
   ansible.builtin.service_facts:
 
+- name: "Determine available time synchronization daemon"
+  ansible.builtin.set_fact:
+    deploykit_has_chronyd: >-
+      {{ ('chronyd.service' in ansible_facts.services) and
+         (ansible_facts.services['chronyd.service'].status | default('not-found') not in ['not-found', 'masked']) }}
+    deploykit_has_chrony: >-
+      {{ ('chrony.service' in ansible_facts.services) and
+         (ansible_facts.services['chrony.service'].status | default('not-found') not in ['not-found', 'masked']) }}
+    deploykit_has_timesyncd: >-
+      {{ ('systemd-timesyncd.service' in ansible_facts.services) and
+         (ansible_facts.services['systemd-timesyncd.service'].status | default('not-found') not in ['not-found', 'masked']) }}
+
 - name: "Install systemd-timesyncd fallback if no time daemon exists"
   ansible.builtin.package:
     name: systemd-timesyncd
     state: present
   when:
-    - "'chrony.service' not in ansible_facts.services"
-    - "'chronyd.service' not in ansible_facts.services"
-    - "'systemd-timesyncd.service' not in ansible_facts.services"
+    - not (deploykit_has_chronyd | bool)
+    - not (deploykit_has_chrony | bool)
+    - not (deploykit_has_timesyncd | bool)
 
 - name: "Enable and start time synchronization service"
   ansible.builtin.systemd:
-    name: "{{ 'chronyd' if 'chronyd.service' in ansible_facts.services else ('chrony' if 'chrony.service' in ansible_facts.services else 'systemd-timesyncd') }}"
+    name: "{{ 'chronyd' if (deploykit_has_chronyd | bool) else ('chrony' if (deploykit_has_chrony | bool) else 'systemd-timesyncd') }}"
     state: started
     enabled: true
 
@@ -42,7 +54,7 @@
     owner: root
     group: root
     mode: "0755"
-  when: "'chrony.service' in ansible_facts.services"
+  when: deploykit_has_chrony | bool
 
 - name: "Configure fallback NTP source for chrony (UDP 123)"
   ansible.builtin.copy:
@@ -53,12 +65,12 @@
     group: root
     mode: "0644"
   register: deploykit_chrony_fallback
-  when: "'chrony.service' in ansible_facts.services"
+  when: deploykit_has_chrony | bool
 
 - name: "Reload chrony service"
   ansible.builtin.systemd:
     name: chrony
     state: restarted
   when:
-    - "'chrony.service' in ansible_facts.services"
+    - deploykit_has_chrony | bool
     - deploykit_chrony_fallback.changed | default(false)

@@ -41,7 +41,9 @@
       ansible.builtin.service_facts:
 
     - name: "Configure firewalld ports"
-      when: "'firewalld.service' in ansible_facts.services"
+      when:
+        - "'firewalld.service' in ansible_facts.services"
+        - "ansible_facts.services['firewalld.service'].status | default('not-found') not in ['not-found', 'masked']"
       block:
         - name: "Ensure firewalld service is enabled and started"
           ansible.builtin.systemd:
